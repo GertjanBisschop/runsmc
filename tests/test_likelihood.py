@@ -115,72 +115,32 @@ class TestCountLineages:
         assert edge.left == 1
         tp = tables.nodes[edge.parent].time
         tc = tables.nodes[edge.child].time
-        intervals = [
-            0.17267483,
-            0.24757562,
-            0.28614193,
-            0.33072171,
-            0.468715,
-            1.02148028,
-        ]
-        f, g = lik.lineages_to_left_count(edge, tp, tc, ts, intervals)
-        f_exp = np.array([7, 6, 5, 4, 3, 1])
-        g_exp = np.array([2, 2, 2, 2, 2, 3])
+        intervals_exp = np.array([ts.nodes_time[u] for u in range(30, 37)])
+        f, intervals = lik.lineages_to_left_count(edge, ts)
+        f_exp = np.array([8, 7, 6, 5, 4, 2])
         assert np.array_equal(f, f_exp)
-
-    def no_test_update_sort(self):
-        f = np.zeros(4, dtype=np.int64)
-        intervals = np.random.rand(4)
-        intervals.sort()
-        intervals[-1] = 0
-        print(intervals)
-        t_child = np.random.rand(1)[0]
-        print(t_child)
-        insert_idx = len(intervals) - 1
-        lik.update_and_sort(f, intervals, insert_idx, t_child)
-        print(intervals)
-        print(f)
-        assert False
-
-    def no_test_update_sort_integers(self):
-        f = np.array([1, 2, 4, 0])
-        intervals = np.array([1, 5, 7, 0])
-        t_child = 5
-        insert_idx = len(intervals) - 1
-        lik.update_and_sort(f, intervals, insert_idx, t_child)
-        assert np.array_equal(intervals, np.array([1, 5, 7, 0]))
-        print(f)
-        assert np.array_equal(f, np.array([2, 3, 4, 0]))
-
-    def no_test_update_sort_integers2(self):
-        f = np.array([5, 1, 2, 0])
-        intervals = np.array([1, 5, 7, 0])
-        t_child = 2
-        insert_idx = len(intervals) - 1
-        lik.update_and_sort(f, intervals, insert_idx, t_child)
-        assert np.array_equal(intervals, np.array([1, 2, 5, 7]))
-        print(f)
-        assert np.array_equal(f, np.array([6, 7, 1, 2]))
-
-    def no_test_update_sort_integers3(self):
-        f = np.array([4, 9, 1, 0])
-        intervals = np.array([1, 5, 7, 0])
-        t_child = 1
-        insert_idx = len(intervals) - 1
-        lik.update_and_sort(f, intervals, insert_idx, t_child)
-        assert np.array_equal(intervals, np.array([1, 5, 7, 0]))
-        assert np.array_equal(f, np.array([5, 9, 1, 0]))
+        assert np.all(np.equal(intervals, intervals_exp))
 
 
 class TestRunSMC:
-    def run_smc(r, seed):
+    def run_smc(self, r, pop_size, seed):
         ts = msprime.sim_ancestry(
             samples=10,
             recombination_rate=r,
-            population_size=1,
+            population_size=pop_size,
             sequence_length=10,
             model="smc",
             coalescing_segments_only=False,
             random_seed=seed,
+            ploidy=2,
         )
         return ts
+
+    def test_compute_lik(self):
+    	rec_rate = 1
+    	pop_size = 1
+    	coal_rate = 2 * pop_size
+    	ts = run_smc(0.1, pop_size, 12)
+    	ts = ts.dump_tables()
+    	ret =log_lik(tables, rec_rate, coal_rate):
+    	assert False

@@ -14,118 +14,70 @@ def update_array(array, intervals, t_parent, t_child):
             array[i] += 1
         i += 1
 
-
-def update_and_sort(array, intervals, max_idx, t_child, t_parent):
-    i = 0
-    while i < max_idx:
-        if t_child < intervals[i]:
-            break
-        array[i] += 1
-        i += 1
-
-    if i > 0:
-        if intervals[i - 1] != t_child:
-            intervals[i + 1 :] = intervals[i:-1]
-            intervals[i] = t_child
-            array[i:] = array[i - 1 : -1]
-            array[i] += 1
-            max_idx += 1
-    return max_idx
-
-
-def lineages_to_left_count(edge, tp, tc, ts, intervals):
-    # the edge for which we are computing the likelihood should start here
-    # we assume unary nodes for coalescence events have been registered
-    # returns values ordered from tp to tc
-    x = edge.left
-    dts = ts.decapitate(time=tp)
-    tree = dts.at(x)
-    num_intervals = len(intervals)
-    f = np.zeros(num_intervals, dtype=np.int64)
-    g = np.zeros(num_intervals, dtype=np.int64)
-
-    stack = tree.roots
-    while stack:
-        parent = stack.pop()
-        for child in tree.children(parent):
-            edge_id = tree.edge_array[child]
-            if ts.edges_left[edge_id] < x:
-                # update f from t_parent to t_child + 1
-                update_array(f, intervals, tree.time(parent), tree.time(child))
-            else:
-                # update g from t_parent to t_child + 1
-                update_array(g, intervals, tree.time(parent), tree.time(child))
-            if tree.time(child) > tc:
-                stack.append(child)
-
-    ret = f + g * (g - 1) / 2
-
-    return f, g
-
-
-def lineages_to_left_count_alt(edge, ts):
-    # the edge for which we are computing the likelihood should start here
-    # returns values ordered from tc to tp
-    tp = ts.nodes_time[edge.parent]
-    tc = ts.nodes_time[edge.child]
-    dts = ts.decapitate(time=tp)
-    tree = dts.at(edge.left)
-    max_num_intervals = edge.parent - edge.child
-    f = -np.ones(max_num_intervals, dtype=np.int64)
-    intervals = np.zeros(max_num_intervals + 1)
-    intervals[0] = tc
-    intervals[1] = tp
-    max_idx = 2
-    node_times = dts.tables.nodes.time
-    update_f(
-        edge.left,
-        edge.child,
-        tree.roots,
-        tree.edge_array,
-        dts.edges_left,
-        tree.left_child_array,
-        tree.right_sib_array,
-        node_times,
-        f,
-        intervals,
-        max_idx,
-    )
-
-    return f, intervals
-
-
 def update_f(
     left,
-    focal_child,
     roots,
+    focal_child,
     edge_array,
-    edges_left,
     left_child_array,
     right_sib_array,
+    edges_left,
     times,
     f,
     intervals,
-    max_idx,
 ):
     stack = roots
     while stack:
         parent = stack.pop()
         child = left_child_array[parent]
         while child != tskit.NULL:
-            edge_id = edge_array[child]
             tc = times[child]
-            if edges_left[edge_id] < left:
-                max_idx = update_and_sort(f, intervals, max_idx, tc)
-            elif child < focal_child:
-                max_idx = update_and_sort(f, intervals, max_idx, tc)
+            tp = times[parent]
+            edge_id = edge_array[child]
+            if edges_left[edge_id] < left or child < focal_child:
+                update_array(f, intervals, tp, tc)
             if tc > intervals[0]:
                 stack.append(child)
             child = right_sib_array[child]
 
+def lineages_to_left_count(edge, ts):
+    # returns values ordered from tc to tp
+    tp = ts.nodes_time[edge.parent]
+    tc = ts.nodes_time[edge.child]
+    dts = ts.decapitate(time=tp)
+    tree = dts.at(edge.left)
+    max_num_intervals = edge.parent - edge.child + 1
+    intervals = np.zeros(max_num_intervals)
+    intervals[0] = tp
+    num_intervals = 1
+    for node in tree.nodes(order='timedesc'):
+        node_time = tree.time(node)
+        if node_time >= tc and node_time < tp:
+            intervals[num_intervals] = node_time
+            num_intervals += 1
+    intervals = intervals[num_intervals::-1]
+    f = np.zeros(num_intervals - 1, dtype=np.int64)
+    update_f(
+        edge.left,
+        tree.roots,
+        edge.child,
+        tree.edge_array,
+        tree.left_child_array,
+        tree.right_sib_array,
+        dts.edges_left,
+        dts.nodes_time,
+        f,
+        intervals
+    )
+
     return f, intervals
 
-
 def coalescencing_child(tree, parent):
+    """
+    Returns the index of the child associated with the
+    edge with the smallest left coordinate or with the smallest
+    node index to break ties.
+    """
     left = math.inf
     coal_child = math.inf
 
@@ -137,7 +89,7 @@ def coalescencing_child(tree, parent):
             else:
                 coal_child = child
 
-    assert coal_child < math, inf
+    assert coal_child < math.inf
     return coal_child
 
 
@@ -280,8 +232,6 @@ def log_lik(tables, rec_rate, coal_rate):
                 right_parent_time = tables.nodes[edge.parent].time
                 f, intervals = lineages_to_left_count(
                     edge,
-                    right_parent_time,
-                    child_time,
                     ts,
                 )
                 last_parent = edge.parent
