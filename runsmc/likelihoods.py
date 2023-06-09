@@ -1,5 +1,6 @@
 import itertools
 import msprime
+import math
 import numpy as np
 import operator
 import tskit
@@ -13,6 +14,7 @@ def update_array(array, intervals, t_parent, t_child):
         if intervals[i] >= t_child:
             array[i] += 1
         i += 1
+
 
 def update_f(
     left,
@@ -40,23 +42,27 @@ def update_f(
                 stack.append(child)
             child = right_sib_array[child]
 
+
 def lineages_to_left_count(edge, ts):
     # returns values ordered from tc to tp
     tp = ts.nodes_time[edge.parent]
     tc = ts.nodes_time[edge.child]
     dts = ts.decapitate(time=tp)
     tree = dts.at(edge.left)
-    max_num_intervals = edge.parent - edge.child + 1
-    intervals = np.zeros(max_num_intervals)
+    intervals = np.zeros(ts.num_nodes)
+    add_zero = False
     intervals[0] = tp
     num_intervals = 1
-    for node in tree.nodes(order='timedesc'):
+    for node in tree.nodes(order="timedesc"):
         node_time = tree.time(node)
         if node_time >= tc and node_time < tp:
             intervals[num_intervals] = node_time
+            if node_time == 0:
+                break
             num_intervals += 1
+    num_intervals += 1 * add_zero
     intervals = intervals[num_intervals::-1]
-    f = np.zeros(num_intervals - 1, dtype=np.int64)
+    f = np.zeros(num_intervals, dtype=np.int64)
     update_f(
         edge.left,
         tree.roots,
@@ -67,10 +73,11 @@ def lineages_to_left_count(edge, ts):
         dts.edges_left,
         dts.nodes_time,
         f,
-        intervals
+        intervals,
     )
 
     return f, intervals
+
 
 def coalescencing_child(tree, parent):
     """
@@ -80,11 +87,11 @@ def coalescencing_child(tree, parent):
     """
     left = math.inf
     coal_child = math.inf
-
     for child in tree.children(parent):
         edge = tree.edge(child)
-        if edge.left <= left:
-            if edge.left == left:
+        edge_left = tree.edge_array[edge]
+        if edge_left <= left:
+            if edge_left == left:
                 coal_child = min(coal_child, child)
             else:
                 coal_child = child
@@ -114,14 +121,20 @@ def log_depth(
     # TODO: compute everything on log scale
     ret = 0
     interval_lengths = intervals[1:] - intervals[:-1]
+    print(intervals)
+    print(interval_lengths)
+    print(left_count)
+    assert len(interval_lengths) == len(left_count)
     # intervals[0] == child_time, intervals[-1] == right_parent_time
     assert intervals[-1] == right_parent_time
     area = left_count * interval_lengths
-    cum_area = np.cumsum(left_count[::-1])[::-1]  # area remaining after interval i
+    cum_area = np.cumsum(area[::-1])[::-1]  # area remaining after interval i
+    F = cum_area[0]
+    cum_area[:-1] = cum_area[1:]
+    cum_area[-1] = 0
 
     if not rec_event:
-        F = cum_area[-1]
-        ret = coal_rate * np.exp(-F)
+        ret = np.exp(-coal_rate * F)
     else:
         t0 = intervals[0]
         # divide integral up in intervals: [(child_time, t1), (t1, t2), ...(tk, min_parent_time)]
@@ -129,17 +142,21 @@ def log_depth(
         # \int_t0^t1 r*exp(-r*s) * exp(-c*(t1-s)*area[t0]-c*cum_area[t1]) ds
         for i in range(intervals.size - 1):
             t1 = min(intervals[i + 1], min_parent_time)
-            denom = -coal_rate * area[i] + r
+            denom = -coal_rate * left_count[i] + rec_rate
             if denom != 0:
-                num1 = np.exp(-coal_rate * area[i] * (t1 - t0) - rec_rate * t0)
-                num2 = np.exp(-rec_rate * t1)
-                temp = (num1 + num2) / denom
+                num1 = np.exp(-coal_rate * cum_area[i])
+                num2 = np.exp(-(coal_rate * left_count[i] * (t1 - t0) + rec_rate * t0))
+                num3 = np.exp(-rec_rate * t1)
+                temp = num1 * (num2 - num3)
             else:
-                temp = (t1 - t0) * np.exp(-rec_rate * t1)
-            ret += temp * rec_rate * np.exp(-coal_rate * cum_area[i])
-            if t_1 == min_parent_time:
+                temp = (t1 - t0) * np.exp(
+                    -rec_rate * (t1 * left_count[i] + cum_area[i]) / left_count[i]
+                )
+            ret += temp * rec_rate * t0
+            if t1 == min_parent_time:
                 break
             t0 = t1
+    print(ret)
     assert ret > 0, "About to take log of value <= 0"
 
     return np.log(ret)
@@ -168,7 +185,6 @@ def log_edge(
 ):
     ret = 0
     ret += log_depth(
-        left,
         min_parent_time,
         right_parent_time,
         child_time,
@@ -235,6 +251,7 @@ def log_lik(tables, rec_rate, coal_rate):
                     ts,
                 )
                 last_parent = edge.parent
+                tree.seek(edge.left)
                 coal_event = child == coalescencing_child(tree, last_parent)
                 min_parent_time = min(left_parent_time, right_parent_time)
             else:

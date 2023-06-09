@@ -128,7 +128,7 @@ class TestRunSMC:
             samples=10,
             recombination_rate=r,
             population_size=pop_size,
-            sequence_length=10,
+            sequence_length=100,
             model="smc",
             coalescing_segments_only=False,
             random_seed=seed,
@@ -137,10 +137,11 @@ class TestRunSMC:
         return ts
 
     def test_compute_lik(self):
-    	rec_rate = 1
-    	pop_size = 1
+    	rec_rate = 1e-5
+    	pop_size = 1000
     	coal_rate = 2 * pop_size
-    	ts = run_smc(0.1, pop_size, 12)
-    	ts = ts.dump_tables()
-    	ret =log_lik(tables, rec_rate, coal_rate):
+    	ts = self.run_smc(rec_rate, pop_size, 12)
+    	tables = ts.dump_tables()
+    	ret = lik.log_lik(tables, rec_rate, coal_rate)
+    	print(ret)
     	assert False
