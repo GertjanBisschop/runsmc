@@ -107,19 +107,32 @@ class TestCountLineages:
         tables.rtrim()
         ts = tables.tree_sequence()
         edge_id = 32
+        intervals_exp = np.array([ts.nodes_time[u] for u in range(30, 37)])
+        f_exp = np.array([8, 7, 6, 5, 4, 2])
+        self.verify_edge(ts, edge_id, f_exp, intervals_exp, 36, 30)
+
+        edge_id = 32
+        intervals_exp = np.array([ts.nodes_time[u] for u in range(30, 37)])
+        f_exp = np.array([8, 7, 6, 5, 4, 2])
+        self.verify_edge(ts, edge_id, f_exp, intervals_exp, 36, 30)
+
+        edge_id = 9
+        intervals_exp = np.array([ts.nodes_time[u] for u in range(20, 25)])
+        intervals_exp = np.insert(intervals_exp, 0, 0)
+        f_exp = np.array([13, 12, 10, 8, 6])
+        self.verify_edge(ts, edge_id, f_exp, intervals_exp, 24, 13)
+
+
+    def verify_edge(self, ts, edge_id, f_exp, intervals_exp, parent, child):
+        tables = ts.tables
         edge = tables.edges[edge_id]
-        parent = 36
-        child = 30
         assert edge.child == child
         assert edge.parent == parent
-        assert edge.left == 1
-        tp = tables.nodes[edge.parent].time
-        tc = tables.nodes[edge.child].time
-        intervals_exp = np.array([ts.nodes_time[u] for u in range(30, 37)])
+        # assert edge.left == 1
         f, intervals = lik.lineages_to_left_count(edge, ts)
-        f_exp = np.array([8, 7, 6, 5, 4, 2])
-        assert np.array_equal(f, f_exp)
+        assert len(f) == len(intervals) - 1
         assert np.all(np.equal(intervals, intervals_exp))
+        assert np.array_equal(f, f_exp)
 
 
 class TestRunSMC:
@@ -137,11 +150,11 @@ class TestRunSMC:
         return ts
 
     def test_compute_lik(self):
-    	rec_rate = 1e-5
-    	pop_size = 1000
-    	coal_rate = 2 * pop_size
-    	ts = self.run_smc(rec_rate, pop_size, 12)
-    	tables = ts.dump_tables()
-    	ret = lik.log_lik(tables, rec_rate, coal_rate)
-    	print(ret)
-    	assert False
+        rec_rate = 1e-5
+        pop_size = 1000
+        coal_rate = 2 * pop_size
+        ts = self.run_smc(rec_rate, pop_size, 12)
+        tables = ts.dump_tables()
+        ret = lik.log_lik(tables, rec_rate, coal_rate)
+        print(ret)
+        assert False

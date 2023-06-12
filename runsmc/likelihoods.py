@@ -16,7 +16,7 @@ def update_array(array, intervals, t_parent, t_child):
         i += 1
 
 
-def update_f(
+def count_lineages(
     left,
     roots,
     focal_child,
@@ -25,9 +25,9 @@ def update_f(
     right_sib_array,
     edges_left,
     times,
-    f,
     intervals,
 ):
+    f = np.zeros(len(intervals) - 1, dtype=np.int64)
     stack = roots
     while stack:
         parent = stack.pop()
@@ -42,6 +42,8 @@ def update_f(
                 stack.append(child)
             child = right_sib_array[child]
 
+    return f
+
 
 def lineages_to_left_count(edge, ts):
     # returns values ordered from tc to tp
@@ -49,21 +51,15 @@ def lineages_to_left_count(edge, ts):
     tc = ts.nodes_time[edge.child]
     dts = ts.decapitate(time=tp)
     tree = dts.at(edge.left)
-    intervals = np.zeros(ts.num_nodes)
-    add_zero = False
-    intervals[0] = tp
-    num_intervals = 1
+    intervals = [tp]
     for node in tree.nodes(order="timedesc"):
         node_time = tree.time(node)
         if node_time >= tc and node_time < tp:
-            intervals[num_intervals] = node_time
+            intervals.append(node_time)
             if node_time == 0:
                 break
-            num_intervals += 1
-    num_intervals += 1 * add_zero
-    intervals = intervals[num_intervals::-1]
-    f = np.zeros(num_intervals, dtype=np.int64)
-    update_f(
+    intervals = np.array(intervals)[::-1]
+    f = count_lineages(
         edge.left,
         tree.roots,
         edge.child,
@@ -72,7 +68,6 @@ def lineages_to_left_count(edge, ts):
         tree.right_sib_array,
         dts.edges_left,
         dts.nodes_time,
-        f,
         intervals,
     )
 
@@ -121,30 +116,26 @@ def log_depth(
     # TODO: compute everything on log scale
     ret = 0
     interval_lengths = intervals[1:] - intervals[:-1]
-    print(intervals)
-    print(interval_lengths)
-    print(left_count)
     assert len(interval_lengths) == len(left_count)
-    # intervals[0] == child_time, intervals[-1] == right_parent_time
+    assert intervals[0] == child_time
     assert intervals[-1] == right_parent_time
     area = left_count * interval_lengths
-    cum_area = np.cumsum(area[::-1])[::-1]  # area remaining after interval i
-    F = cum_area[0]
-    cum_area[:-1] = cum_area[1:]
-    cum_area[-1] = 0
+    # cum_area is area remaining after interval i
+    cum_area = np.sum(area)
 
     if not rec_event:
-        ret = np.exp(-coal_rate * F)
+        ret = np.exp(-coal_rate * cum_area)
     else:
         t0 = intervals[0]
         # divide integral up in intervals: [(child_time, t1), (t1, t2), ...(tk, min_parent_time)]
         # for single time slice integrate
-        # \int_t0^t1 r*exp(-r*s) * exp(-c*(t1-s)*area[t0]-c*cum_area[t1]) ds
-        for i in range(intervals.size - 1):
+        # \int_t0^t1 r*exp(-r*s) * exp(-c*(t1-s)*left_count[t0]-c*cum_area[t1]) ds
+        for i in range(interval_lengths.size):
+            cum_area -= area[i]
             t1 = min(intervals[i + 1], min_parent_time)
             denom = -coal_rate * left_count[i] + rec_rate
             if denom != 0:
-                num1 = np.exp(-coal_rate * cum_area[i])
+                num1 = np.exp(-coal_rate * cum_area)
                 num2 = np.exp(-(coal_rate * left_count[i] * (t1 - t0) + rec_rate * t0))
                 num3 = np.exp(-rec_rate * t1)
                 temp = num1 * (num2 - num3)
@@ -156,9 +147,8 @@ def log_depth(
             if t1 == min_parent_time:
                 break
             t0 = t1
-    print(ret)
-    assert ret > 0, "About to take log of value <= 0"
 
+    assert ret > 0, "About to take log of value <= 0"
     return np.log(ret)
 
 
@@ -195,7 +185,8 @@ def log_edge(
         rec_event,
     )
     if coal_event:
-        ret += np.log(coal_rate) * f[-1]  # with or without f[-1] !?
+        # with or without f[-1] = instantaneous coal rate!?
+        ret += np.log(coal_rate) * f[-1]
     ret += log_span(rec_rate, right_parent_time, child_time, right, left)
 
     return ret
