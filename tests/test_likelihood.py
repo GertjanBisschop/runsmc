@@ -152,7 +152,7 @@ class TestRunSMC:
     def test_compute_lik(self):
         rec_rate = 1e-5
         pop_size = 1000
-        coal_rate = 2 * pop_size
+        coal_rate = 1/(2 * pop_size)
         ts = self.run_smc(rec_rate, pop_size, 12)
         tables = ts.dump_tables()
         ret = lik.log_lik(tables, rec_rate, coal_rate)

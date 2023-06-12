@@ -127,23 +127,25 @@ def log_depth(
         ret = np.exp(-coal_rate * cum_area)
     else:
         t0 = intervals[0]
-        # divide integral up in intervals: [(child_time, t1), (t1, t2), ...(tk, min_parent_time)]
+        # compute following integral
+        # \int_tc^t_min r * exp(-r*s) * exp(-c*\int_s^tp f(x,u) du) ds
+        # divide integral up in intervals:
+        # [(child_time, t1), (t1, t2), ...(tk, min_parent_time)]
         # for single time slice integrate
-        # \int_t0^t1 r*exp(-r*s) * exp(-c*(t1-s)*left_count[t0]-c*cum_area[t1]) ds
+        # \int_t0^t1 r*exp(-r*s) * exp(-c*(t1-s)*left_count[t0]-c*cum_area_t1) ds
         for i in range(interval_lengths.size):
             cum_area -= area[i]
             t1 = min(intervals[i + 1], min_parent_time)
             denom = -coal_rate * left_count[i] + rec_rate
             if denom != 0:
-                num1 = np.exp(-coal_rate * cum_area)
-                num2 = np.exp(-(coal_rate * left_count[i] * (t1 - t0) + rec_rate * t0))
-                num3 = np.exp(-rec_rate * t1)
-                temp = num1 * (num2 - num3)
+                num1 = np.exp(-coal_rate * left_count[i] * (t1 - t0) - rec_rate * t0)
+                num2 = np.exp(-coal_rate * cum_area - rec_rate * t1)
+                temp = num1 - num2
             else:
                 temp = (t1 - t0) * np.exp(
                     -rec_rate * (t1 * left_count[i] + cum_area[i]) / left_count[i]
                 )
-            ret += temp * rec_rate * t0
+            ret += temp * rec_rate
             if t1 == min_parent_time:
                 break
             t0 = t1
