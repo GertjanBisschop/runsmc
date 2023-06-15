@@ -113,26 +113,42 @@ def log_depth(
     coal_rate,
     rec_event,
 ):
+    """
+    For the edge we are computing the likelihood of:
+    min_parent_time = min(edge.parent, time of parent of edge with right
+    endpoint edge.left if any)
+    right_parent_time = time(edge.parent)
+    child_time = time(edge.child)
+    left_count = array counting the number of segments the segment
+    associated with edge.child can coalesce with for each of the
+    intervals defined by the nodes in the marginal tree (tree.at(edge.left))
+    rec_event: boolean: indicating whether a recombination event happened some
+    time between child_time and min_parent_time at position edge.left
+    """
     # TODO: compute everything on log scale
     ret = 0
     interval_lengths = intervals[1:] - intervals[:-1]
     assert len(interval_lengths) == len(left_count)
     assert intervals[0] == child_time
     assert intervals[-1] == right_parent_time
+    # area under the left_count non-increasing step function
     area = left_count * interval_lengths
     # cum_area is area remaining after interval i
     cum_area = np.sum(area)
 
     if not rec_event:
+        # if no recombination event expression simplifies to
         ret = np.exp(-coal_rate * cum_area)
     else:
-        t0 = intervals[0]
         # compute following integral
-        # \int_tc^t_min r * exp(-r*s) * exp(-c*\int_s^tp f(x,u) du) ds
-        # divide integral up in intervals:
+        # \int_time_child^min_parent_time r * exp(-r*s) *
+        # exp(-c*\int_s^time_parent f(x,u) du) ds
+        # compute integral as sum of integrals over intervals:
         # [(child_time, t1), (t1, t2), ...(tk, min_parent_time)]
-        # for single time slice integrate
+        # for single time slice (t0, t1) integrate
         # \int_t0^t1 r*exp(-r*s) * exp(-c*(t1-s)*left_count[t0]-c*cum_area_t1) ds
+        # with r recombination rate and c the coalesence rate
+        t0 = intervals[0]
         for i in range(interval_lengths.size):
             cum_area -= area[i]
             t1 = min(intervals[i + 1], min_parent_time)
@@ -175,6 +191,19 @@ def log_edge(
     rec_event,
     coal_event,
 ):
+    """
+    Compute the likelihood for a certain edge:
+    This has 3 components:
+    1/ log_depth: likelihood of the left endpoint of the segment,
+    spanned by that edge, not coalescing with any of the lineages
+    it can coalesce with until the coalescence event in edge.parent.
+    Here we integrate out the time of the recombination event
+    (in case of a recombination) that happened at position edge.left
+    2/ if coal_event: if the coalescence happend with another segment
+    that was among the segments that edge.child could coalesce with
+    we add this additional term.
+    3/ log_span: likelihood of observing an edge of this length
+    """
     ret = 0
     ret += log_depth(
         min_parent_time,
@@ -189,6 +218,7 @@ def log_edge(
     if coal_event:
         # with or without f[-1] = instantaneous coal rate!?
         ret += np.log(coal_rate) * f[-1]
+    # -r (t_p - t_c) * (r - l)
     ret += log_span(rec_rate, right_parent_time, child_time, right, left)
 
     return ret
