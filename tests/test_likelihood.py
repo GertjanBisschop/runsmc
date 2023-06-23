@@ -122,7 +122,6 @@ class TestCountLineages:
         f_exp = np.array([13, 12, 10, 8, 6])
         self.verify_edge(ts, edge_id, f_exp, intervals_exp, 24, 13)
 
-
     def verify_edge(self, ts, edge_id, f_exp, intervals_exp, parent, child):
         tables = ts.tables
         edge = tables.edges[edge_id]
@@ -150,11 +149,81 @@ class TestRunSMC:
         return ts
 
     def test_compute_lik(self):
+        seeds = np.array([12, 24, 36])
         rec_rate = 1e-5
         pop_size = 1000
-        coal_rate = 1/(2 * pop_size)
-        ts = self.run_smc(rec_rate, pop_size, 12)
-        tables = ts.dump_tables()
-        ret = lik.log_lik(tables, rec_rate, coal_rate)
-        print(ret)
-        assert False
+        coal_rate = 1 / (2 * pop_size)
+        for seed in seeds:
+            ts = self.run_smc(rec_rate, pop_size, seed)
+            tables = ts.dump_tables()
+            ret = lik.log_lik(tables, rec_rate, coal_rate)
+            assert np.exp(ret) > 0
+            assert np.exp(ret) < 1
+
+
+class TestEdgeCases:
+    def test_binary_interval(self):
+        left_counts = np.array([8])
+        intervals = np.array([12.1, 15.9])
+        min_parent_time = 14.1
+        rec_rate = 1e-5
+        coal_rate = 1 / 2e3
+        cum_area = left_counts[0] * (intervals[-1] - intervals[0])
+
+        tmin = min(intervals[-1], min_parent_time)
+        exp0 = -rec_rate * intervals[0] - coal_rate * cum_area
+        cum_area -= left_counts[0] * (tmin - intervals[0])
+        exp1 = -rec_rate * tmin - coal_rate * cum_area
+        exp_value = (
+            rec_rate
+            / (rec_rate - coal_rate * left_counts[0])
+            * (np.exp(exp0) - np.exp(exp1))
+        )
+
+        obs_value = lik.log_depth(
+            min_parent_time,
+            intervals[-1],
+            intervals[0],
+            left_counts,
+            intervals,
+            rec_rate,
+            coal_rate,
+            True,
+        )
+        assert np.isclose(obs_value, exp_value)
+
+    def test_triple_interval(self):
+        left_counts = np.array([8, 7])
+        intervals = np.array([12.1, 13.9, 15.9])
+        interval_lengths = intervals[1:] - intervals[:-1]
+        min_parent_time = 14.1
+        rec_rate = 1e-5
+        coal_rate = 1 / 2e3
+        cum_area = np.sum(left_counts * interval_lengths)
+
+        def _r(f):
+            return rec_rate / (rec_rate - coal_rate * f)
+
+        ret = _r(left_counts[0]) * np.exp(
+            -rec_rate * intervals[0] - coal_rate * cum_area
+        )
+        cum_area -= 1.8 * 8
+        ret += (_r(left_counts[1]) - _r(left_counts[0])) * np.exp(
+            -rec_rate * intervals[1] - coal_rate * cum_area
+        )
+        cum_area -= 0.2 * 7
+        ret -= _r(left_counts[1]) * np.exp(
+            -rec_rate * min_parent_time - coal_rate * cum_area
+        )
+
+        obs_value = lik.log_depth(
+            min_parent_time,
+            intervals[-1],
+            intervals[0],
+            left_counts,
+            intervals,
+            rec_rate,
+            coal_rate,
+            True,
+        )
+        assert np.isclose(obs_value, ret)

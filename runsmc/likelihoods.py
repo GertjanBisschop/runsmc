@@ -74,7 +74,7 @@ def lineages_to_left_count(edge, ts):
     return f, intervals
 
 
-def coalescencing_child(tree, parent):
+def coalescencing_child(tree, ts, parent):
     """
     Returns the index of the child associated with the
     edge with the smallest left coordinate or with the smallest
@@ -84,8 +84,9 @@ def coalescencing_child(tree, parent):
     coal_child = math.inf
     for child in tree.children(parent):
         edge = tree.edge(child)
-        edge_left = tree.edge_array[edge]
+        edge_left = ts.edges_left[edge]
         if edge_left <= left:
+            left = edge_left
             if edge_left == left:
                 coal_child = min(coal_child, child)
             else:
@@ -113,19 +114,6 @@ def log_depth(
     coal_rate,
     rec_event,
 ):
-    """
-    For the edge we are computing the likelihood of:
-    min_parent_time = min(edge.parent, time of parent of edge with right
-    endpoint edge.left if any)
-    right_parent_time = time(edge.parent)
-    child_time = time(edge.child)
-    left_count = array counting the number of segments the segment
-    associated with edge.child can coalesce with for each of the
-    intervals defined by the nodes in the marginal tree (tree.at(edge.left))
-    rec_event: boolean: indicating whether a recombination event happened some
-    time between child_time and min_parent_time at position edge.left
-    """
-    # TODO: compute everything on log scale
     ret = 0
     interval_lengths = intervals[1:] - intervals[:-1]
     assert len(interval_lengths) == len(left_count)
@@ -133,41 +121,39 @@ def log_depth(
     assert intervals[-1] == right_parent_time
     # area under the left_count non-increasing step function
     area = left_count * interval_lengths
-    # cum_area is area remaining after interval i
     cum_area = np.sum(area)
+
+    def f(f0, f1):
+        n = rec_rate * coal_rate * (f1 - f0)
+        d = (rec_rate - coal_rate * f1) * (rec_rate - coal_rate * f0)
+        return n / d
 
     if not rec_event:
         # if no recombination event expression simplifies to
         ret = np.exp(-coal_rate * cum_area)
     else:
-        # compute following integral
-        # \int_time_child^min_parent_time r * exp(-r*s) *
-        # exp(-c*\int_s^time_parent f(x,u) du) ds
-        # compute integral as sum of integrals over intervals:
-        # [(child_time, t1), (t1, t2), ...(tk, min_parent_time)]
-        # for single time slice (t0, t1) integrate
-        # \int_t0^t1 r*exp(-r*s) * exp(-c*(t1-s)*left_count[t0]-c*cum_area_t1) ds
-        # with r recombination rate and c the coalesence rate
-        t0 = intervals[0]
-        for i in range(interval_lengths.size):
-            cum_area -= area[i]
-            t1 = min(intervals[i + 1], min_parent_time)
-            denom = -coal_rate * left_count[i] + rec_rate
-            if denom != 0:
-                num1 = np.exp(-coal_rate * left_count[i] * (t1 - t0) - rec_rate * t0)
-                num2 = np.exp(-coal_rate * cum_area - rec_rate * t1)
-                temp = num1 - num2
-            else:
-                temp = (t1 - t0) * np.exp(
-                    -rec_rate * (t1 * left_count[i] + cum_area[i]) / left_count[i]
-                )
-            ret += temp * rec_rate
-            if t1 == min_parent_time:
-                break
-            t0 = t1
+        denoms = rec_rate - coal_rate * left_count
+        if np.any(denoms == 0):
+            raise ValueError("denom is 0")
+        else:
+            t1 = intervals[0]
+            ret = rec_rate / denoms[0] * np.exp(-rec_rate * t1 - coal_rate * cum_area)
+            for i in range(1, len(intervals)):
+                t0 = t1
+                t1 = min(min_parent_time, intervals[i])
+                cum_area -= left_count[i - 1] * (t1 - t0)
+                if t1 == min_parent_time:
+                    break
 
-    assert ret > 0, "About to take log of value <= 0"
-    return np.log(ret)
+                ret += f(left_count[i - 1], left_count[i]) * np.exp(
+                    -rec_rate * t1 - coal_rate * cum_area
+                )
+
+            ret -= (
+                rec_rate / denoms[i - 1] * np.exp(-rec_rate * t1 - coal_rate * cum_area)
+            )
+
+    return ret
 
 
 def log_span(r, parent_time, child_time, left, right):
@@ -275,7 +261,7 @@ def log_lik(tables, rec_rate, coal_rate):
                 )
                 last_parent = edge.parent
                 tree.seek(edge.left)
-                coal_event = child == coalescencing_child(tree, last_parent)
+                coal_event = child == coalescencing_child(tree, ts, last_parent)
                 min_parent_time = min(left_parent_time, right_parent_time)
             else:
                 right = edge.right
