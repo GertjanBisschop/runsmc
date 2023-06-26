@@ -1,6 +1,7 @@
 import pytest
 import tskit
 import msprime
+import math
 import numpy as np
 
 import runsmc.likelihoods as lik
@@ -156,9 +157,60 @@ class TestRunSMC:
         for seed in seeds:
             ts = self.run_smc(rec_rate, pop_size, seed)
             tables = ts.dump_tables()
-            ret = lik.log_lik(tables, rec_rate, coal_rate)
+            ret = lik.log_likelihood(tables, rec_rate, pop_size)
             assert np.exp(ret) > 0
             assert np.exp(ret) < 1
+
+    def test_compute_lik_b(self):
+        seeds = np.array([1212, 46654, 84684])
+        rec_rate = 1e-4
+        pop_size = 100
+        coal_rate = 1 / (2 * pop_size)
+        for seed in seeds:
+            ts = self.run_smc(rec_rate, pop_size, seed)
+            tables = ts.dump_tables()
+            ret = lik.log_likelihood(tables, rec_rate, pop_size)
+            assert np.exp(ret) > 0
+            assert np.exp(ret) < 1
+
+class TestRunHudson:
+    def run_hudson(self, r, pop_size, seed, num_samples=10):
+        ts = msprime.sim_ancestry(
+            samples=num_samples,
+            recombination_rate=r,
+            population_size=pop_size,
+            sequence_length=100,
+            coalescing_segments_only=False,
+            random_seed=seed,
+            ploidy=2,
+        )
+        return ts
+
+    def test_compute_lik(self):
+        seeds = np.array([6, 36, 72])
+        rec_rate = 1e-5
+        pop_size = 1000
+        coal_rate = 1 / (2 * pop_size)
+        for seed in seeds:
+            ts = self.run_hudson(rec_rate, pop_size, seed)
+            tables = ts.dump_tables()
+            ret = lik.log_likelihood(tables, rec_rate, pop_size)
+            assert np.exp(ret) > 0
+            assert np.exp(ret) < 1
+
+    def test_no_rec(self):
+        seeds = np.array([4544, 146, 2334])
+        rec_rate = 0.0
+        pop_size = 1000
+        coal_rate = 1 / (2 * pop_size)
+        num_samples = 2
+        for seed in seeds:
+            ts = self.run_hudson(rec_rate, pop_size, seed, num_samples)
+            tables = ts.dump_tables()
+            ret = lik.log_likelihood(tables, rec_rate, pop_size)
+            ret_hudson = msprime.log_arg_likelihood(ts, recombination_rate=0.0, Ne=pop_size)
+            assert np.isclose(ret_hudson, ret)
+
 
 
 class TestEdgeCases:
@@ -182,15 +234,13 @@ class TestEdgeCases:
 
         obs_value = lik.log_depth(
             min_parent_time,
-            intervals[-1],
-            intervals[0],
             left_counts,
             intervals,
             rec_rate,
             coal_rate,
             True,
         )
-        assert np.isclose(obs_value, exp_value)
+        assert np.isclose(obs_value, np.log(exp_value))
 
     def test_triple_interval(self):
         left_counts = np.array([8, 7])
@@ -218,12 +268,10 @@ class TestEdgeCases:
 
         obs_value = lik.log_depth(
             min_parent_time,
-            intervals[-1],
-            intervals[0],
             left_counts,
             intervals,
             rec_rate,
             coal_rate,
             True,
         )
-        assert np.isclose(obs_value, ret)
+        assert np.isclose(obs_value, np.log(ret))

@@ -77,18 +77,20 @@ def lineages_to_left_count(edge, ts):
 def coalescencing_child(tree, ts, parent):
     """
     Returns the index of the child associated with the
-    edge with the smallest left coordinate or with the smallest
+    edge with the largest left coordinate or with the largest
     node index to break ties.
+    Lineages can only coalesce with lineages with that start off
+    to their left. Or have a smaller node id to break ties.
     """
-    left = math.inf
-    coal_child = math.inf
+    left = 0
+    coal_child = -1
     for child in tree.children(parent):
         edge = tree.edge(child)
         edge_left = ts.edges_left[edge]
-        if edge_left <= left:
+        if edge_left >= left:
             left = edge_left
             if edge_left == left:
-                coal_child = min(coal_child, child)
+                coal_child = max(coal_child, child)
             else:
                 coal_child = child
 
@@ -106,8 +108,6 @@ def edges_by_child_timeasc(tables):
 
 def log_depth(
     min_parent_time,
-    right_parent_time,
-    child_time,
     left_count,
     intervals,
     rec_rate,
@@ -117,8 +117,6 @@ def log_depth(
     ret = 0
     interval_lengths = intervals[1:] - intervals[:-1]
     assert len(interval_lengths) == len(left_count)
-    assert intervals[0] == child_time
-    assert intervals[-1] == right_parent_time
     # area under the left_count non-increasing step function
     area = left_count * interval_lengths
     cum_area = np.sum(area)
@@ -152,8 +150,8 @@ def log_depth(
             ret -= (
                 rec_rate / denoms[i - 1] * np.exp(-rec_rate * t1 - coal_rate * cum_area)
             )
-
-    return ret
+    assert ret > 0, "About to take log of non-positive value."
+    return np.log(ret)
 
 
 def log_span(r, parent_time, child_time, left, right):
@@ -168,8 +166,6 @@ def log_edge(
     left,
     right,
     min_parent_time,
-    right_parent_time,
-    child_time,
     f,
     intervals,
     rec_rate,
@@ -193,8 +189,6 @@ def log_edge(
     ret = 0
     ret += log_depth(
         min_parent_time,
-        right_parent_time,
-        child_time,
         f,
         intervals,
         rec_rate,
@@ -202,25 +196,24 @@ def log_edge(
         rec_event,
     )
     if coal_event:
-        # with or without f[-1] = instantaneous coal rate!?
-        ret += np.log(coal_rate) * f[-1]
+        ret += np.log(coal_rate) #* f[-1]
     # -r (t_p - t_c) * (r - l)
+    right_parent_time = intervals[-1]
+    child_time = intervals[0]
     ret += log_span(rec_rate, right_parent_time, child_time, right, left)
 
     return ret
 
 
-def log_lik(tables, rec_rate, coal_rate):
+def log_likelihood(tables, rec_rate, population_size):
     # assumption: tables have been generated with
     # coalescing_segments_only flag set to False
-    assert (
-        rec_rate > 0
-    ), "Check compute likelihood for coalescent without recombination."
 
     ret = 0
     ts = tables.tree_sequence()
     tree = ts.first()
     num_nodes = tables.nodes.num_rows
+    coal_rate = 1/(2 * population_size)
 
     # sort edges based on child, edge.left to break ties
     for child, edges in edges_by_child_timeasc(tables):
@@ -241,8 +234,6 @@ def log_lik(tables, rec_rate, coal_rate):
                         left,
                         right,
                         min_parent_time,
-                        right_parent_time,
-                        child_time,
                         f,
                         intervals,
                         rec_rate,
@@ -261,7 +252,10 @@ def log_lik(tables, rec_rate, coal_rate):
                 )
                 last_parent = edge.parent
                 tree.seek(edge.left)
-                coal_event = child == coalescencing_child(tree, ts, last_parent)
+                if f[-1] > 0:
+                    coal_event = child == coalescencing_child(tree, ts, last_parent)
+                else:
+                    coal_event = False
                 min_parent_time = min(left_parent_time, right_parent_time)
             else:
                 right = edge.right
@@ -270,8 +264,6 @@ def log_lik(tables, rec_rate, coal_rate):
             left,
             right,
             min_parent_time,
-            right_parent_time,
-            child_time,
             f,
             intervals,
             rec_rate,
