@@ -163,15 +163,7 @@ def log_span(r, parent_time, child_time, left, right):
 
 
 def log_edge(
-    left,
-    right,
-    min_parent_time,
-    f,
-    intervals,
-    rec_rate,
-    coal_rate,
-    rec_event,
-    coal_event,
+    left, right, min_parent_time, f, intervals, rec_rate, coal_rate, rec_event
 ):
     """
     Compute the likelihood for a certain edge:
@@ -195,8 +187,6 @@ def log_edge(
         coal_rate,
         rec_event,
     )
-    if coal_event:
-        ret += np.log(coal_rate) #* f[-1]
     # -r (t_p - t_c) * (r - l)
     right_parent_time = intervals[-1]
     child_time = intervals[0]
@@ -211,9 +201,8 @@ def log_likelihood(tables, rec_rate, population_size):
 
     ret = 0
     ts = tables.tree_sequence()
-    tree = ts.first()
     num_nodes = tables.nodes.num_rows
-    coal_rate = 1/(2 * population_size)
+    coal_rate = 1 / (2 * population_size)
 
     # sort edges based on child, edge.left to break ties
     for child, edges in edges_by_child_timeasc(tables):
@@ -239,7 +228,6 @@ def log_likelihood(tables, rec_rate, population_size):
                         rec_rate,
                         coal_rate,
                         rec_event,
-                        coal_event,
                     )
 
                     rec_event = True
@@ -251,25 +239,17 @@ def log_likelihood(tables, rec_rate, population_size):
                     ts,
                 )
                 last_parent = edge.parent
-                tree.seek(edge.left)
-                if f[-1] > 0:
-                    coal_event = child == coalescencing_child(tree, ts, last_parent)
-                else:
-                    coal_event = False
                 min_parent_time = min(left_parent_time, right_parent_time)
             else:
                 right = edge.right
 
         ret += log_edge(
-            left,
-            right,
-            min_parent_time,
-            f,
-            intervals,
-            rec_rate,
-            coal_rate,
-            rec_event,
-            coal_event,
+            left, right, min_parent_time, f, intervals, rec_rate, coal_rate, rec_event
         )
+
+    # determine number of coalescence events
+    exclude_nodes = msprime.NodeType.COMMON_ANCESTOR.value | 1
+    num_coal_events = np.sum(np.bitwise_and(exclude_nodes, tables.nodes.flags) == 0)
+    ret += num_coal_events * np.log(coal_rate)
 
     return ret

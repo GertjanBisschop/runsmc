@@ -173,6 +173,7 @@ class TestRunSMC:
             assert np.exp(ret) > 0
             assert np.exp(ret) < 1
 
+
 class TestRunHudson:
     def run_hudson(self, r, pop_size, seed, num_samples=10):
         ts = msprime.sim_ancestry(
@@ -208,9 +209,10 @@ class TestRunHudson:
             ts = self.run_hudson(rec_rate, pop_size, seed, num_samples)
             tables = ts.dump_tables()
             ret = lik.log_likelihood(tables, rec_rate, pop_size)
-            ret_hudson = msprime.log_arg_likelihood(ts, recombination_rate=0.0, Ne=pop_size)
+            ret_hudson = msprime.log_arg_likelihood(
+                ts, recombination_rate=0.0, Ne=pop_size
+            )
             assert np.isclose(ret_hudson, ret)
-
 
 
 class TestEdgeCases:
