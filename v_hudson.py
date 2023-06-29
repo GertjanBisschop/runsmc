@@ -23,16 +23,15 @@ class ModelComparison:
     recombination_rate: float
     population_size: float
     sequence_length: float
-    extract_info: List[Callable[[tskit.TreeSequence], np.float64]]
     seed: int
+    output_dir: str
     discrete_genome: bool = False
 
-    def __post_init__(self):
-        self.num_functions = len(self.extract_info)
-        self.shape = (self.num_functions, self.num_reps)
-        # self.rng = np.random.default_rng(self.seed)
+    def run(self, f):
+        fr = getattr(self, f)
+        return fr()
 
-    def run_sims(self):
+    def run_sims_full_arg(self):
         return msprime.sim_ancestry(
             samples=self.samples,
             recombination_rate=self.recombination_rate,
@@ -44,11 +43,49 @@ class ModelComparison:
             num_replicates=self.num_reps,
         )
 
-    def run_models(self, *models):
-        assert len(models) > 1, "At least 2 model names are required for a comparison"
-        results = np.zeros((len(models), *self.shape), dtype=np.float64)
-        for i, ts in tqdm(enumerate(self.run_sims()), total=self.num_reps):
-            results[0, 0, i] = msprime.log_arg_likelihood(
+    def run_sims_unary(self, model):
+        return msprime.sim_ancestry(
+            samples=self.samples,
+            recombination_rate=self.recombination_rate,
+            population_size=self.population_size,
+            sequence_length=self.sequence_length,
+            coalescing_segments_only=False,
+            random_seed=self.seed,
+            model=model,
+            discrete_genome=self.discrete_genome,
+            num_replicates=self.num_reps,
+        )
+
+    def hudson_smc_hist(self):
+        results = np.zeros((2, self.num_reps))
+        models = ['hudson', 'smc']
+        for m in range(len(models)):
+            for i, ts in tqdm(enumerate(self.run_sims_unary(model=models[m])), total=self.num_reps):
+                results[m, i] = lik.log_likelihood(
+                    ts.tables, self.recombination_rate, self.population_size
+                )
+            
+        filename = self.output_dir / "hudson_smc_hist.png"
+        plot_hist(results, filename, models)
+
+    def unary_simplified(self):
+        results = np.zeros((2, self.num_reps))
+        for i, ts in tqdm(enumerate(self.run_sims_unary()), total=self.num_reps):
+            results[0, i] = lik.log_likelihood(
+                ts.tables, self.recombination_rate, self.population_size
+            )
+            ts = ts.simplify()
+            results[1, i] = lik.log_likelihood(
+                ts.tables, self.recombination_rate, self.population_size
+            )
+        filename = self.output_dir / "smc_unary_simpl.png"
+        plot_unary_simplified(results, filename)
+
+    def v_hudson(self):
+        models = ['hudson', 'smc, unary', 'smc, simplified']
+        results = np.zeros(((len(models), self.num_reps)), dtype=np.float64)
+        for i, ts in tqdm(enumerate(self.run_sims_full_arg()), total=self.num_reps):
+            results[0, i] = msprime.log_arg_likelihood(
                 ts, self.recombination_rate, self.population_size
             )
             # simplify ts to remove rec nodes and common ancestor events
@@ -65,37 +102,75 @@ class ModelComparison:
                 node_obj = node_obj.replace(flags=0)
                 tables.nodes[j] = node_obj
             ts = tables.tree_sequence()
-            results[1, 0, i] = lik.log_likelihood(
+            results[1, i] = lik.log_likelihood(
                 ts.tables, self.recombination_rate, self.population_size
             )
+            ts_simpl = ts.simplify()
+            results[2, i] = lik.log_likelihood(
+                ts_simpl.tables, self.recombination_rate, self.population_size
+            )
+        results.dump('v_hudson_seed_42.npy')
+        filename = self.output_dir / "v_hudson_unary_simpl.png"
+        plot_v_hudson(results, filename)
 
-        return results
-
-
-def compare_models_plot(result, models, functions, shape, figsize, filename):
-    if len(functions) == 1:
-        mean_plot = np.mean(result)
-        min_plot = np.min(result) + 0.1 * mean_plot
-        max_plot = np.max(result) - 0.1 * mean_plot
-        fig, ax = plt.subplots(figsize=(10, 10))
-        ax.scatter(result[0, 0], result[1, 0])
-        ax.set_xlabel(models[0])
-        ax.set_ylabel(models[1])
-        ax.set_title(functions[0])
-        ax.set_xlim((min_plot, max_plot))
-        ax.set_ylim((min_plot, max_plot))
-
-    else:
-        fig, ax = plt.subplots(*shape, figsize=figsize)
-        ax_flat = ax.flat
-        for i, function in enumerate(functions):
-            ax_flat[i].scatter(result[0, i], result[1, i])
-            ax_flat[i].set_xlabel(models[0])
-            ax_flat[i].set_ylabel(models[1])
-            ax_flat[i].set_title(function)
+def plot_v_hudson(result, filename):
+    mean_plot = np.mean(result)
+    min_plot = np.min(result) + 0.1 * mean_plot
+    max_plot = np.max(result) - 0.1 * mean_plot
+    fig, ax = plt.subplots(figsize=(10, 10))
+    ax.scatter(result[0], result[1], marker='o', label='unary')
+    ax.scatter(result[0], result[2], marker='x', label='full_simplify')
+    ax.set_xlabel('hudson')
+    ax.set_ylabel('smc')
+    ax.set_title('simulation model: hudson')
+    ax.set_xlim((min_plot, max_plot))
+    ax.set_ylim((min_plot, max_plot))
+    # add legend
+    r1 = (np.corrcoef(result[0], result[1])[0, -1])**2
+    r2 = (np.corrcoef(result[0], result[2])[0, -1])**2
+    ax.annotate(
+        'r2_un = {:.2f}, r2_simpl = {:.2f}'.format(r1, r2),
+        xy=(0.1, 0.1), 
+        xycoords='axes fraction',
+    )
+    plt.legend(loc="lower right")
 
     fig.savefig(filename, dpi=70)
 
+def plot_unary_simplified(result, filename):
+    mean_plot = np.mean(result)
+    min_plot = np.min(result) + 0.1 * mean_plot
+    max_plot = np.max(result) - 0.1 * mean_plot
+    fig, ax = plt.subplots(figsize=(10, 10))
+    ax.scatter(result[0], result[1])
+    ax.set_xlabel('smc, unary')
+    ax.set_ylabel('smc, simplified')
+    ax.set_title('simulation model: smc')
+    ax.set_xlim((min_plot, max_plot))
+    ax.set_ylim((min_plot, max_plot))
+
+    fig.savefig(filename, dpi=70)
+
+def plot_hist(result, filename, labels):
+    mean_plot = np.mean(result)
+    min_plot = np.min(result) + 0.1 * mean_plot
+    max_plot = np.max(result) - 0.1 * mean_plot
+    bins = np.linspace(min_plot, max_plot, num=20)
+    fig, ax = plt.subplots(figsize=(10, 10))
+
+    for i in range(result.shape[0]):
+        ax.hist(
+            result[i], 
+            bins, 
+            alpha=0.5, 
+            density=True, 
+            label=labels[i],
+            edgecolor='black', 
+            linewidth=0.75
+        )
+
+    plt.legend(loc='upper right')
+    fig.savefig(filename, dpi=70)
 
 def set_output_dir(output_dir, samples, info_str):
     output_dir = pathlib.Path(output_dir + f"/n_{samples}/" + info_str)
@@ -110,29 +185,20 @@ def run_all(fs, output_dir, seed):
     num_reps = 500
     n = 20
     population_size = 10_000
-    models = ["hudson", "smc"]
-
-    simtracker = ModelComparison(num_reps, n, rho, population_size, L, fs, seed)
-    results = simtracker.run_models(*models)
+    
     info_str = f"L_{L}_rho_{rho}"
     output_dir = set_output_dir(output_dir, n, info_str)
-    filename = output_dir / "v_hudson.png"
-    subplots_shape = (math.ceil(len(fs) / 2), 2)
-    fig_dims = tuple(4 * i for i in subplots_shape[::-1])
-    compare_models_plot(
-        results,
-        models,
-        fs,
-        subplots_shape,  # shape
-        fig_dims,  # size of fig
-        filename,
-    )
+    simtracker = ModelComparison(num_reps, n, rho, population_size, L, seed, output_dir)
+    for f in fs:
+        results = simtracker.run(f)
 
 
 def main():
     parser = argparse.ArgumentParser()
     choices = [
-        "likelihood_scatter",
+        "v_hudson",
+        "unary_simplified",
+        "hudson_smc_hist",
     ]
 
     parser.add_argument(
