@@ -1,3 +1,4 @@
+import bintrees
 import itertools
 import msprime
 import math
@@ -36,7 +37,9 @@ def count_lineages(
             tc = times[child]
             tp = times[parent]
             edge_id = edge_array[child]
-            if edges_left[edge_id] < left or child < focal_child:
+            if edges_left[edge_id] < left:
+                update_array(f, intervals, tp, tc)
+            elif child < focal_child:
                 update_array(f, intervals, tp, tc)
             if tc > intervals[0]:
                 stack.append(child)
@@ -250,6 +253,154 @@ def log_likelihood(tables, rec_rate, population_size):
     # determine number of coalescence events
     exclude_nodes = msprime.NodeType.COMMON_ANCESTOR.value | 1
     num_coal_events = np.sum(np.bitwise_and(exclude_nodes, tables.nodes.flags) == 0)
+    ret += num_coal_events * np.log(coal_rate)
+
+    return ret
+
+def defrag_node_times(avl, num_samples):
+    # any succ_key with same value as key -> remove
+    max_key = avl.max_key()
+    key = 0
+    value = num_samples
+    last_value = -1
+    last_key = -1
+    while key != max_key:
+        if last_value == value:
+            avl.discard(key)
+        else:
+            last_value = value
+            last_key = key
+        key, value = avl.succ_item(last_key)
+
+def counts_avl(avl, start, stop):
+    key = avl.floor_key(start)
+    value = avl[key]
+    intervals = []
+    counts = []
+    while key < stop:
+        intervals.append(key)
+        f_count = max(0, value[0] - 1)
+        assert value[1] >= 0
+        g_count = max(0, (value[1] - 1)/2)
+        counts.append(f_count + g_count)
+        key, value = avl.succ_item(key)
+    intervals.append(stop)
+
+    return np.array(counts), np.array(intervals)
+
+def modify_edge(A, nodes_time, edge, add, idx):
+    t_child = nodes_time[edge.child]
+    t_parent = nodes_time[edge.parent]
+    current_key = t_child
+    if t_child not in A:
+        floor_key = A.floor_key(current_key)
+        A[current_key] = A[floor_key][:]
+    if t_child not in A:
+        floor_key = A.floor_key(current_key)
+        A[current_key] = A[floor_key][:]
+    while current_key != t_parent:
+        A[current_key][idx] += add
+        current_key = A.succ_key(current_key)
+
+def insert_edge(A, nodes_time, edge):
+    modify_edge(A, nodes_time, edge, 1, 1)
+
+def remove_edge(A, nodes_time, edge):
+    modify_edge(A, nodes_time, edge, -1, 0)
+
+def log_likelihood_seq(ts, rec_rate, population_size):
+    # here we can no longer account for the fact that past the
+    # first mrca we might observe discontinuous edges (for the
+    # same parent child pair)
+    ret = 0
+    num_nodes = ts.num_nodes
+    coal_rate = 1 / (2 * population_size)
+    A = bintrees.AVLTree()
+    A[0] = [0, 0]
+    last_parent_array = - np.ones(ts.num_nodes, dtype=np.int64)
+
+    i = 0
+    for _, edges_out, edges_in in ts.edge_diffs():
+        for edge in edges_out:
+            t_child = ts.nodes_time[edge.child]
+            t_parent = ts.nodes_time[edge.parent]
+            if t_child not in A:
+                floor_key = A.floor_key(t_child)
+                A[t_child] = A[floor_key][:]
+            if t_parent not in A:
+                floor_key = A.floor_key(t_parent)
+                A[t_parent] = A[floor_key][:]
+            current_key = t_child
+            while current_key != t_parent:
+                A[current_key][0] -= 1
+                current_key = A.succ_key(current_key)
+        
+        #defrag_node_times(A, ts.num_samples)        
+        # once edges from previous tree are out
+        # A contains all the counts for edges that start off to the left
+        # of x and overlap with x
+        for edge in edges_in:
+            # new edges coming in are those that start at position x 
+            t_child = ts.nodes_time[edge.child]
+            t_parent = ts.nodes_time[edge.parent]
+            if t_child not in A:
+                floor_key = A.floor_key(t_child)
+                A[t_child] = A[floor_key][:]
+                # for all keys between this and A[t_parent] + 1
+            if t_parent not in A:
+                floor_key = A.floor_key(t_parent)
+                A[t_parent] = A[floor_key][:]
+            current_key = t_child
+            while current_key != t_parent:
+                A[current_key][-1] += 1
+                current_key = A.succ_key(current_key)
+        
+        #defrag_node_times(A, ts.num_samples)
+        
+        for edge in edges_in:
+            rec_event = False
+            left_parent_time = math.inf
+            last_parent = last_parent_array[edge.child]
+            left = edge.left
+            if last_parent != -1:
+                left_parent_time = ts.nodes_time[last_parent]
+                if edge.parent != last_parent:
+                    rec_event = True
+
+            right_parent_time = ts.nodes_time[edge.parent]
+            min_parent_time = min(left_parent_time, right_parent_time)
+            child_time = ts.nodes_time[edge.child]
+            left_count, intervals = counts_avl(A, child_time, right_parent_time)
+        
+            ret += log_depth(
+                min_parent_time,
+                left_count,
+                intervals,
+                rec_rate,
+                coal_rate,
+                rec_event,
+            )
+            ret += log_span(
+                rec_rate,
+                right_parent_time,
+                child_time,
+                left,
+                edge.right,
+            )
+            last_parent_array[edge.child] = edge.parent
+
+        print(f'---tree {i}----')
+        for key, value in A.items():
+            print(key, value)
+        # merge g and f counts
+        for value in A.values():
+            value[0] += value[1]
+            value[1] = 0
+        i+=1
+
+    # determine number of coalescence events
+    exclude_nodes = msprime.NodeType.COMMON_ANCESTOR.value | 1
+    num_coal_events = np.sum(np.bitwise_and(exclude_nodes, ts.nodes_flags) == 0)
     ret += num_coal_events * np.log(coal_rate)
 
     return ret
