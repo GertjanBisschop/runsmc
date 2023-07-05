@@ -1,8 +1,8 @@
-import pytest
-import tskit
 import msprime
 import math
 import numpy as np
+import pytest
+import tskit
 
 import runsmc.likelihoods as lik
 
@@ -177,6 +177,7 @@ class TestRunSMC:
         tables = ts.dump_tables()
         exp = lik.log_likelihood(tables, rec_rate, pop_size)
         ret = lik.log_likelihood_seq(ts, rec_rate, pop_size)
+        assert np.isclose(np.exp(exp), np.exp(ret))
         assert np.isclose(exp, ret)
 
     def test_compute_lik_seq_simple(self):
@@ -186,12 +187,12 @@ class TestRunSMC:
         coal_rate = 1 / (2 * pop_size)
         samples = 2
         ts = self.run_smc(rec_rate, pop_size, seed, samples)
-        print(ts.draw_text())
         tables = ts.dump_tables()
         exp = lik.log_likelihood(tables, rec_rate, pop_size)
         ret = lik.log_likelihood_seq(ts, rec_rate, pop_size)
+        assert np.isclose(np.exp(exp), np.exp(ret))
         assert np.isclose(exp, ret)
-        assert False
+
 
 class TestRunHudson:
     def run_hudson(self, r, pop_size, seed, num_samples=10):
