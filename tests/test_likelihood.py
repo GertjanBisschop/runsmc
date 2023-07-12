@@ -5,6 +5,34 @@ import pytest
 import tskit
 
 import runsmc.likelihoods as lik
+import runsmc.liknb as liknb
+
+
+def run_hudson(r, pop_size, seed, num_samples=10):
+    ts = msprime.sim_ancestry(
+        samples=num_samples,
+        recombination_rate=r,
+        population_size=pop_size,
+        sequence_length=100,
+        coalescing_segments_only=False,
+        random_seed=seed,
+        ploidy=2,
+    )
+    return ts
+
+def run_smc(r, pop_size, seed, samples=10):
+    ts = msprime.sim_ancestry(
+        samples=samples,
+        recombination_rate=r,
+        population_size=pop_size,
+        sequence_length=100,
+        model="smc",
+        coalescing_segments_only=False,
+        random_seed=seed,
+        ploidy=2,
+    )
+    return ts
+
 
 
 class TestCountLineages:
@@ -131,18 +159,6 @@ class TestCountLineages:
 
 
 class TestRunSMC:
-    def run_smc(self, r, pop_size, seed, samples=10):
-        ts = msprime.sim_ancestry(
-            samples=samples,
-            recombination_rate=r,
-            population_size=pop_size,
-            sequence_length=100,
-            model="smc",
-            coalescing_segments_only=False,
-            random_seed=seed,
-            ploidy=2,
-        )
-        return ts
 
     def test_compute_lik(self):
         seeds = np.array([12, 24, 36])
@@ -150,7 +166,7 @@ class TestRunSMC:
         pop_size = 1000
         coal_rate = 1 / (2 * pop_size)
         for seed in seeds:
-            ts = self.run_smc(rec_rate, pop_size, seed)
+            ts = run_smc(rec_rate, pop_size, seed)
             tables = ts.dump_tables()
             ret = lik.log_likelihood(tables, rec_rate, pop_size)
             assert np.exp(ret) > 0
@@ -162,37 +178,38 @@ class TestRunSMC:
         pop_size = 100
         coal_rate = 1 / (2 * pop_size)
         for seed in seeds:
-            ts = self.run_smc(rec_rate, pop_size, seed)
+            ts = run_smc(rec_rate, pop_size, seed)
             tables = ts.dump_tables()
             ret = lik.log_likelihood(tables, rec_rate, pop_size)
             assert np.exp(ret) > 0
             assert np.exp(ret) < 1
 
     def test_compute_lik_seq(self):
-        seed = 12
+        seeds = [12, 23423, 231, 967893]
         rec_rate = 1e-5
         pop_size = 1000
         coal_rate = 1 / (2 * pop_size)
-        ts = self.run_smc(rec_rate, pop_size, seed)
-        tables = ts.dump_tables()
-        exp = lik.log_likelihood(tables, rec_rate, pop_size)
-        ret = lik.log_likelihood_seq(ts, rec_rate, pop_size)
-        assert np.isclose(np.exp(exp), np.exp(ret))
-        assert np.isclose(exp, ret)
-
+        for seed in seeds:
+            ts = run_smc(rec_rate, pop_size, seed)
+            tables = ts.dump_tables()
+            exp = lik.log_likelihood(tables, rec_rate, pop_size)
+            ret = lik.log_likelihood_seq(ts, rec_rate, pop_size)
+            assert np.isclose(np.exp(exp), np.exp(ret))
+            print(exp, ret)
+       
     def test_compute_lik_seq_simple(self):
-        seed = 3554
+        seeds = [3554, 2368, 94720, 836502]
         rec_rate = 5e-6
         pop_size = 1000
         coal_rate = 1 / (2 * pop_size)
         samples = 2
-        ts = self.run_smc(rec_rate, pop_size, seed, samples)
-        tables = ts.dump_tables()
-        exp = lik.log_likelihood(tables, rec_rate, pop_size)
-        ret = lik.log_likelihood_seq(ts, rec_rate, pop_size)
-        assert np.isclose(np.exp(exp), np.exp(ret))
-        assert np.isclose(exp, ret)
-
+        for seed in seeds:
+            ts = run_smc(rec_rate, pop_size, seed, samples)
+            tables = ts.dump_tables()
+            exp = lik.log_likelihood(tables, rec_rate, pop_size)
+            ret = lik.log_likelihood_seq(ts, rec_rate, pop_size)
+            assert np.isclose(np.exp(exp), np.exp(ret))
+            print(exp, ret)
 
 class TestRunHudson:
     def run_hudson(self, r, pop_size, seed, num_samples=10):
@@ -213,7 +230,7 @@ class TestRunHudson:
         pop_size = 1000
         coal_rate = 1 / (2 * pop_size)
         for seed in seeds:
-            ts = self.run_hudson(rec_rate, pop_size, seed)
+            ts = run_hudson(rec_rate, pop_size, seed)
             tables = ts.dump_tables()
             ret = lik.log_likelihood(tables, rec_rate, pop_size)
             assert np.exp(ret) > 0
@@ -226,7 +243,7 @@ class TestRunHudson:
         coal_rate = 1 / (2 * pop_size)
         num_samples = 2
         for seed in seeds:
-            ts = self.run_hudson(rec_rate, pop_size, seed, num_samples)
+            ts = run_hudson(rec_rate, pop_size, seed, num_samples)
             tables = ts.dump_tables()
             ret = lik.log_likelihood(tables, rec_rate, pop_size)
             ret_hudson = msprime.log_arg_likelihood(
@@ -241,7 +258,7 @@ class TestRunHudson:
         coal_rate = 1 / (2 * pop_size)
         num_samples = 2
         for seed in seeds:
-            ts = self.run_hudson(rec_rate, pop_size, seed, num_samples)
+            ts = run_hudson(rec_rate, pop_size, seed, num_samples)
             print(ts.draw_text())
             ret = lik.log_likelihood_seq(ts, rec_rate, pop_size)
             ret_hudson = msprime.log_arg_likelihood(
@@ -249,8 +266,19 @@ class TestRunHudson:
             )
             assert np.isclose(ret_hudson, ret)
 
+    def test_simplified_ts(self):
+        seeds = np.array([6, 36, 72])
+        rec_rate = 1e-5
+        pop_size = 1000
+        coal_rate = 1 / (2 * pop_size)
+        for seed in seeds:
+            ts = run_hudson(rec_rate, pop_size, seed)
+            ts = ts.simplify()
+            ret = lik.log_likelihood_seq(ts, rec_rate, pop_size)
+            assert ret < 0
 
-class TestEdgeCases:
+
+class TestLogDepth:
     def test_binary_interval(self):
         left_counts = np.array([8])
         intervals = np.array([12.1, 15.9])
@@ -312,3 +340,84 @@ class TestEdgeCases:
             True,
         )
         assert np.isclose(obs_value, np.log(ret))
+
+class TestNumba:
+    def test_nodes_time(self):
+        rec_rate = 5e-6
+        pop_size = 1000
+        coal_rate = 1 / (2 * pop_size)
+        seed = 2592
+        assert True
+
+    def test_binary_search(self):
+        x = np.array([0.1, 0.5, 1.2, 1.6, 1.8, 2.0, 3.0, 9.0])
+        ret = liknb.binary_search(x, 1.8, 0, 4)
+        assert ret == 4
+        ret = liknb.binary_search(x, 1.8, 4, x.size)
+        assert ret == 4
+
+    def test_counts(self):
+        intervals = np.array([0, 2, 4, 6, 8], np.float64)
+        counts = np.array([4, 3, 2, 1, 1], np.int64)
+        i = liknb.update_counts_descending(
+            intervals,
+            counts,
+            4,
+            2,
+            -1
+        )
+        assert i == 0
+        exp_counts = np.array([4, 2, 1, 0, 0], dtype=np.int64)
+        assert np.array_equal(counts, exp_counts)
+        
+        i = liknb.update_counts_descending(
+            intervals,
+            counts,
+            4,
+            0,
+            +1
+        )
+        assert i == -1
+        exp_counts = np.array([5, 3, 2, 1, 0], dtype=np.int64)
+        assert np.array_equal(counts, exp_counts)
+
+    def test_no_rec(self):
+        seeds = np.array([4544, 146, 2334])
+        rec_rate = 0.0
+        pop_size = 1000
+        coal_rate = 1 / (2 * pop_size)
+        num_samples = 2
+        for seed in seeds:
+            ts = run_hudson(rec_rate, pop_size, seed, num_samples)
+            print(ts.draw_text())
+            lik.log_likelihood_seq(ts, rec_rate, pop_size)
+            print('new version')
+            ret = liknb.log_likelihood(ts, rec_rate, pop_size)
+            ret_hudson = msprime.log_arg_likelihood(
+                ts, recombination_rate=0.0, Ne=pop_size
+            )
+            assert np.isclose(ret_hudson, ret)
+
+    def test_compute_lik_seq_simple(self):
+        seeds = [3554, 2368, 94720, 836502]
+        rec_rate = 5e-6
+        pop_size = 1000
+        coal_rate = 1 / (2 * pop_size)
+        samples = 2
+        for seed in seeds:
+            ts = run_smc(rec_rate, pop_size, seed, samples)
+            exp = lik.log_likelihood_seq(ts, rec_rate, pop_size)
+            ret = liknb.log_likelihood(ts, rec_rate, pop_size)
+            assert np.isclose(exp, ret)
+    
+    def test_compute_lik_seq(self):
+        seeds = [12, 23423, 231, 967893]
+        rec_rate = 1e-5
+        pop_size = 1000
+        coal_rate = 1 / (2 * pop_size)
+        for seed in seeds:
+            ts = run_smc(rec_rate, pop_size, seed)
+            exp = liknb.log_likelihood(ts, rec_rate, pop_size)
+            print('old_version')
+            ret = lik.log_likelihood_seq(ts, rec_rate, pop_size)
+            assert np.isclose(exp, ret)

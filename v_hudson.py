@@ -109,7 +109,7 @@ class ModelComparison:
             results[2, i] = lik.log_likelihood(
                 ts_simpl.tables, self.recombination_rate, self.population_size
             )
-        results.dump('v_hudson_seed_42.npy')
+        # results.dump('v_hudson_seed_42.npy')
         filename = self.output_dir / "v_hudson_unary_simpl.png"
         plot_v_hudson(results, filename)
 

@@ -136,6 +136,8 @@ def log_depth(
 def log_span(r, parent_time, child_time, left, right):
     ret = 0
     if r > 0:
+        assert right > left
+        assert parent_time > child_time
         ret = -r * (parent_time - child_time) * (right - left)
 
     return ret
@@ -311,6 +313,10 @@ def log_likelihood_seq(ts, rec_rate, population_size):
             min_parent_time = min(left_parent_time, right_parent_time)
             child_time = ts.nodes_time[edge.child]
             left_count, intervals = counts_avl(A, child_time, right_parent_time)
+            #print(edge.parent, edge.child)
+            #print(left_count)
+            #print(intervals)
+            #print('-------------')
             ret += log_depth(
                 min_parent_time,
                 left_count,
