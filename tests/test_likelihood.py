@@ -362,12 +362,12 @@ class TestNumba:
         counts = np.array([4, 3, 2, 1, 1], np.int64)
         i = liknb.update_counts_descending(intervals, counts, 4, 2, -1)
         assert i == 0
-        exp_counts = np.array([4, 2, 1, 0, 0], dtype=np.int64)
+        exp_counts = np.array([4, 2, 1, 0, 1], dtype=np.int64)
         assert np.array_equal(counts, exp_counts)
 
         i = liknb.update_counts_descending(intervals, counts, 4, 0, +1)
         assert i == -1
-        exp_counts = np.array([5, 3, 2, 1, 0], dtype=np.int64)
+        exp_counts = np.array([5, 3, 2, 1, 1], dtype=np.int64)
         assert np.array_equal(counts, exp_counts)
 
     def test_triple_interval(self):
@@ -385,11 +385,11 @@ class TestNumba:
         ret = _r(left_counts[0]) * np.exp(
             -rec_rate * intervals[0] - coal_rate * cum_area
         )
-        cum_area -= 1.8 * 8
+        cum_area -= (intervals[1] - intervals[0]) * 8
         ret += (_r(left_counts[1]) - _r(left_counts[0])) * np.exp(
             -rec_rate * intervals[1] - coal_rate * cum_area
         )
-        cum_area -= 0.2 * 7
+        cum_area -= (min_parent_time - intervals[1]) * 7
         ret -= _r(left_counts[1]) * np.exp(
             -rec_rate * min_parent_time - coal_rate * cum_area
         )
@@ -402,9 +402,22 @@ class TestNumba:
             coal_rate,
             True,
         )
-        # correct for multiplying with coal_rate
-        obs_value -= np.log(coal_rate)
-        assert np.isclose(obs_value, np.log(ret))
+        ret = np.log(ret)
+        assert np.isclose(obs_value, ret)
+        left_counts = np.array([8, 7, 7])
+        intervals = np.array([12.1, 13.9, 14.1, 15.9])
+        parent_ptr = 3
+        obs_value = liknb.log_depth_descending(
+            left_counts,
+            intervals,
+            intervals[-2],
+            intervals[0],
+            parent_ptr,
+            rec_rate,
+            coal_rate,
+            True,
+        )
+        assert np.isclose(obs_value, ret)
 
     def test_no_rec(self):
         seeds = np.array([4544, 146, 2334])
@@ -414,14 +427,13 @@ class TestNumba:
         num_samples = 2
         for seed in seeds:
             ts = run_hudson(rec_rate, pop_size, seed, num_samples)
-            print(ts.draw_text())
-            lik.log_likelihood_seq(ts, rec_rate, pop_size)
-            print("new version")
             ret = liknb.log_likelihood(ts, rec_rate, pop_size)
             ret_hudson = msprime.log_arg_likelihood(
                 ts, recombination_rate=0.0, Ne=pop_size
             )
+            ret2 = liknb.log_likelihood_descending(ts, rec_rate, pop_size)
             assert np.isclose(ret_hudson, ret)
+            assert np.isclose(ret2, ret)
 
     def test_compute_lik_seq_simple(self):
         seeds = [3554, 2368, 94720, 836502]
@@ -433,7 +445,10 @@ class TestNumba:
             ts = run_smc(rec_rate, pop_size, seed, samples)
             exp = lik.log_likelihood_seq(ts, rec_rate, pop_size)
             ret = liknb.log_likelihood(ts, rec_rate, pop_size)
+            ret2 = liknb.log_likelihood_descending(ts, rec_rate, pop_size)
             assert np.isclose(exp, ret)
+            print(ret2, ret, exp, seed)
+            assert np.isclose(ret2, ret)
 
     def test_compute_lik_seq(self):
         seeds = [12, 23423, 231, 967893]
@@ -442,6 +457,9 @@ class TestNumba:
         coal_rate = 1 / (2 * pop_size)
         for seed in seeds:
             ts = run_smc(rec_rate, pop_size, seed)
-            exp = liknb.log_likelihood(ts, rec_rate, pop_size)
-            ret = lik.log_likelihood_seq(ts, rec_rate, pop_size)
-            assert np.isclose(np.exp(exp), np.exp(ret))
+            exp = lik.log_likelihood_seq(ts, rec_rate, pop_size)
+            ret = liknb.log_likelihood(ts, rec_rate, pop_size)
+            ret2 = liknb.log_likelihood_descending(ts, rec_rate, pop_size)
+            print(ret2, ret, exp)
+            assert np.isclose(exp, ret)
+            assert np.isclose(ret, ret2)
