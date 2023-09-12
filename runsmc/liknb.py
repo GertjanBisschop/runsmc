@@ -249,33 +249,33 @@ def log_depth_descending(
             break
 
     if not rec_event:
-        ret = np.exp(-coal_rate * cum_area)
-    else:
-        assert min_parent_time == intervals[i]
-        temp = -(
-            coal_rate
-            / (rec_rate - coal_rate * left_count[i - 1])
-            * (rec_rate / coal_rate)
-            * np.exp(-rec_rate * intervals[i] - coal_rate * cum_area)
-        )
-        while i > 0:
-            cum_area += (intervals[i] - intervals[i - 1]) * left_count[i - 1]
-            i -= 1
-            if intervals[i] == child_time:
-                break
-            ret += f(left_count[i - 1], left_count[i]) * np.exp(
-                -rec_rate * intervals[i] - coal_rate * cum_area
-            )
-
-        assert intervals[i] == child_time
-        ret += (
-            coal_rate
-            / (rec_rate - coal_rate * left_count[i])
-            * (rec_rate / coal_rate)
-            * np.exp(-rec_rate * intervals[i] - coal_rate * cum_area)
+        return -coal_rate * cum_area
+    
+    assert min_parent_time == intervals[i]
+    temp = -(
+        coal_rate
+        / (rec_rate - coal_rate * left_count[i - 1])
+        * (rec_rate / coal_rate)
+        * np.exp(-rec_rate * intervals[i] - coal_rate * cum_area)
+    )
+    while i > 0:
+        cum_area += (intervals[i] - intervals[i - 1]) * left_count[i - 1]
+        i -= 1
+        if intervals[i] == child_time:
+            break
+        ret += f(left_count[i - 1], left_count[i]) * np.exp(
+            -rec_rate * intervals[i] - coal_rate * cum_area
         )
 
-        ret += temp
+    assert intervals[i] == child_time
+    ret += (
+        coal_rate
+        / (rec_rate - coal_rate * left_count[i])
+        * (rec_rate / coal_rate)
+        * np.exp(-rec_rate * intervals[i] - coal_rate * cum_area)
+    )
+
+    ret += temp
 
     return np.log(ret)
 
@@ -430,7 +430,7 @@ def log_likelihood_descending(ts, rec_rate, population_size):
     return ret
 
 
-@numba.njit
+@numba.njit(cache=True)
 def _log_likelihood_descending_numba(
     tree_pos,
     I,
@@ -447,9 +447,9 @@ def _log_likelihood_descending_numba(
     coalescent_nodes_array = np.zeros(num_nodes, dtype=np.int8)
     num_children_array = np.zeros(num_nodes, dtype=np.int64)
     C = np.zeros_like(I, dtype=np.int64)
+    last_parent_array = -np.ones(num_nodes, dtype=np.int64)
 
     while tree_pos.next():
-        last_parent_array = -np.ones(num_nodes, dtype=np.int64)
         for j in range(tree_pos.out_range[0], tree_pos.out_range[1]):
             e = tree_pos.edge_removal_order[j]
             p = edges_parent[e]
@@ -502,6 +502,11 @@ def _log_likelihood_descending_numba(
             num_children_array[p] += 1
             if num_children_array[p] >= 2:
                 coalescent_nodes_array[p] = 1
+
+        for j in range(tree_pos.out_range[0], tree_pos.out_range[1]):
+            e = tree_pos.edge_removal_order[j]
+            c = edges_child[e]
+            last_parent_array[c] = -1
 
     num_coal_events = np.sum(coalescent_nodes_array)
     ret += num_coal_events * np.log(coal_rate)

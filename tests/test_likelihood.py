@@ -157,7 +157,6 @@ class TestCountLineages:
         assert np.all(np.equal(intervals, intervals_exp))
         assert np.array_equal(f, f_exp)
 
-
 class TestRunSMC:
     def test_compute_lik(self):
         seeds = np.array([12, 24, 36])

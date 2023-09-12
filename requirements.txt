@@ -1,0 +1,5 @@
+bintrees
+msprime>=1.2.1.dev51+g52abee1e
+numba>=0.57.1
+numpy>=1.24.3
+pytest
