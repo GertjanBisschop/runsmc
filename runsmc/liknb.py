@@ -448,6 +448,7 @@ def _log_likelihood_descending_numba(
     num_children_array = np.zeros(num_nodes, dtype=np.int64)
     C = np.zeros_like(I, dtype=np.int64)
     last_parent_array = -np.ones(num_nodes, dtype=np.int64)
+    F = np.zeros_like(I, dtype=np.float64)
 
     while tree_pos.next():
         for j in range(tree_pos.out_range[0], tree_pos.out_range[1]):
