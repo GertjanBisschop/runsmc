@@ -231,9 +231,12 @@ def log_depth_descending(
     i = parent_ptr
 
     def f(f0, f1):
+        fdiff = f1 - f0
+        if fdiff == 0:
+            return 0
         n1 = coal_rate / (rec_rate - coal_rate * f1)
         n2 = coal_rate / (rec_rate - coal_rate * f0)
-        n3 = (f1 - f0) * (rec_rate / coal_rate)
+        n3 = fdiff * (rec_rate / coal_rate)
         return n1 * n2 * n3
 
     if not rec_event:
