@@ -37,66 +37,53 @@ def run_smc(r, pop_size, seed, samples=10):
 
 
 class TestMergeTimeArrays:
-    def test_basic(self):
-        unique_times = np.array([1,4,9,10])
-        pop_size_step_times = np.array([2, 3, 4, 11, 13])
-        node_map = np.array([0,0,0,1,1,2,3,3,3])
-        merged, new_node_map, new_rate_map = likstep.merge_time_arrays(
-            unique_times, pop_size_step_times, node_map
-        )
-        assert merged.size == new_rate_map.size
-        assert new_node_map.size == node_map.size
-        exp_merged = np.unique(
-            np.concatenate(
-                [unique_times, pop_size_step_times]
-                )
-            )
-        assert np.array_equal(exp_merged, merged)
-        exp_node_map = np.array([0, 0, 0, 3, 3, 4, 5, 5, 5])
-        assert np.array_equal(exp_node_map, new_node_map)
-        exp_rate_map = np.array([0,0,1,2,3,3,3,4])
-        assert np.array_equal(exp_rate_map, new_rate_map)
-        
     def test_basic2(self):
-        unique_times = np.array([2,4,9,14])
-        pop_size_step_times = np.array([1, 3, 4, 11, 13])
-        node_map = np.array([0,0,0,1,1,2,3,3,3])
+        unique_times = np.array([2, 4, 9])
+        pop_size_step_times = np.array([0, 3, 4, 11, 13])
+        node_map = np.array([0, 0, 0, 1, 1, 2, 2, 2])
         merged, new_node_map, new_rate_map = likstep.merge_time_arrays(
             unique_times, pop_size_step_times, node_map
         )
         assert merged.size == new_rate_map.size
         assert new_node_map.size == node_map.size
-        exp_merged = np.unique(
-            np.concatenate(
-                [unique_times, pop_size_step_times]
-            )
-        )
+        exp_merged = np.unique(np.concatenate([unique_times, pop_size_step_times]))
         assert np.array_equal(exp_merged, merged)
-        exp_node_map = np.array([1, 1, 1, 3, 3, 4, 7, 7, 7])
+        exp_node_map = np.array([1, 1, 1, 3, 3, 4, 4, 4])
         assert np.array_equal(exp_node_map, new_node_map)
-        exp_rate_map = np.array([0,1,1,2,3,3,4,5])
+        exp_rate_map = np.array([0, 0, 1, 2, 2, 3, 4])
         assert np.array_equal(exp_rate_map, new_rate_map)
 
     def test_basic3(self):
-        unique_times = np.array([2,4,9,14])
+        unique_times = np.array([2, 4, 9, 14])
         pop_size_step_times = np.array([0, 3, 4, 11, 13])
-        node_map = np.array([0,0,0,1,1,2,3,3,3])
+        node_map = np.array([0, 0, 0, 1, 1, 2, 3, 3, 3])
         merged, new_node_map, new_rate_map = likstep.merge_time_arrays(
             unique_times, pop_size_step_times, node_map
         )
         assert merged.size == new_rate_map.size
         assert new_node_map.size == node_map.size
-        exp_merged = np.unique(
-            np.concatenate(
-                [unique_times, pop_size_step_times]
-            )
-        )
+        exp_merged = np.unique(np.concatenate([unique_times, pop_size_step_times]))
         assert np.array_equal(exp_merged, merged)
         exp_node_map = np.array([1, 1, 1, 3, 3, 4, 7, 7, 7])
         assert np.array_equal(exp_node_map, new_node_map)
-        exp_rate_map = np.array([0,0,1,2,2,3,4,4])
+        exp_rate_map = np.array([0, 0, 1, 2, 2, 3, 4, 4])
+        assert np.array_equal(exp_rate_map, new_rate_map)
+
+    def test_basic4(self):
+        unique_times = np.array([0, 2, 4, 9, 14])
+        pop_size_step_times = np.array([0, 3, 4, 11, 13])
+        node_map = np.array([0, 0, 0, 1, 1, 2, 3, 3, 4])
+        merged, new_node_map, new_rate_map = likstep.merge_time_arrays(
+            unique_times, pop_size_step_times, node_map
+        )
+        assert merged.size == new_rate_map.size
+        assert new_node_map.size == node_map.size
+        exp_merged = np.unique(np.concatenate([unique_times, pop_size_step_times]))
+        assert np.array_equal(exp_merged, merged)
+        exp_node_map = np.array([0, 0, 0, 1, 1, 3, 4, 4, 7])
+        assert np.array_equal(exp_node_map, new_node_map)
+        exp_rate_map = np.array([0, 0, 1, 2, 2, 3, 4, 4])
         print(new_rate_map)
-        assert False
         assert np.array_equal(exp_rate_map, new_rate_map)
 
 
@@ -113,6 +100,7 @@ class TestLogDepth:
 
         def _r(f):
             return rec_rate / (rec_rate - coal_rate * f)
+
         temp = np.zeros(3)
         ret = _r(left_counts[0]) * mp.exp(
             -rec_rate * intervals[0] - coal_rate * cum_area
@@ -122,7 +110,7 @@ class TestLogDepth:
         temp[1] = (_r(left_counts[1]) - _r(left_counts[0])) * mp.exp(
             -rec_rate * intervals[1] - coal_rate * cum_area
         )
-        
+
         cum_area -= (min_parent_time - intervals[1]) * 7
         temp[-1] = -_r(left_counts[1]) * mp.exp(
             -rec_rate * min_parent_time - coal_rate * cum_area
@@ -148,25 +136,18 @@ class TestLogDepth:
 
 
 class TestLogLik:
-    def test_compute_lik_seq(self):
+    def test_constant_size(self):
         seeds = [12, 23423, 231, 967893]
         rec_rate = 1e-5
         pop_size = 1000
         coal_rate = 1 / (2 * pop_size)
         for seed in seeds:
             ts = run_smc(rec_rate, pop_size, seed)
-            exp = liknb.log_likelihood_descending(
-                ts, 
-                rec_rate, 
-                pop_size
-            )
+            exp = liknb.log_likelihood_descending(ts, rec_rate, pop_size)
             time_steps = (np.arange(10) * 1000).astype(np.float64)
-            pop_size_array = np.full(time_steps.size, coal_rate)
+            pop_size_array = np.full(time_steps.size, pop_size)
             ret = likstep.log_likelihood_stepwise_ne(
-                ts,
-                rec_rate,
-                pop_size_array,
-                time_steps
-                )
+                ts, rec_rate, pop_size_array, time_steps
+            )
             print(exp, ret)
             assert np.isclose(exp, ret)
