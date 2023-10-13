@@ -7,6 +7,7 @@ import mpmath as mp
 
 import runsmc.liknb as liknb
 import runsmc.likstepwise as likstep
+import runsmc.legacy.likdescending as likdes
 
 
 def run_hudson(r, pop_size, seed, num_samples=10):
@@ -143,7 +144,7 @@ class TestLogLik:
         coal_rate = 1 / (2 * pop_size)
         for seed in seeds:
             ts = run_smc(rec_rate, pop_size, seed)
-            exp = liknb.log_likelihood_descending(ts, rec_rate, pop_size)
+            exp = likdes.log_likelihood_descending(ts, rec_rate, pop_size)
             time_steps = (np.arange(10) * 1000).astype(np.float64)
             pop_size_array = np.full(time_steps.size, pop_size)
             ret = likstep.log_likelihood_stepwise_ne(

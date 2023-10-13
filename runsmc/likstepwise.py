@@ -9,6 +9,7 @@ from runsmc import liknb
 
 @numba.njit(cache=True)
 def two_sum(a, b):
+    # helper function for cascaded summation
     x = a + b
     y = x - a
     e = a - (x - y) + (b - y)
@@ -153,7 +154,7 @@ def _log_likelihood_stepwise_ne(
             # use current edge to update counts for all subsequent edges
             stop_ptr = liknb.update_counts_descending_ptr(C, parent_ptr, child_ptr, 1)
             num_children_array[p] += 1
-            if num_children_array[p] >= 2:
+            if num_children_array[p] == 2:
                 coalescent_interval_array[parent_ptr] += 1
 
         for j in range(tree_pos.out_range[0], tree_pos.out_range[1]):
@@ -234,7 +235,7 @@ def log_likelihood_stepwise_ne(ts, rec_rate, ne_steps, time_steps, ploidy=2):
     # first mrca we might observe discontinuous edges (for the
     # same parent child pair)
     assert ne_steps.size == time_steps.size
-    assert time_steps[0] == 0.0
+    assert np.all(ne_steps>0)
     coal_rate_steps = 1 / (ploidy * ne_steps)
     I, node_map = np.unique(ts.nodes_time, return_inverse=True)
     I, node_map, rate_map = merge_time_arrays(I, time_steps, node_map)

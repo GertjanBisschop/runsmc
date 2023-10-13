@@ -4,8 +4,9 @@ import numpy as np
 import pytest
 import tskit
 
-import runsmc.likelihoods as lik
+import runsmc.legacy.likelihoods as lik
 import runsmc.liknb as liknb
+import runsmc.legacy.likdescending as likdes
 
 
 def run_hudson(r, pop_size, seed, num_samples=10):
@@ -342,29 +343,15 @@ class TestLogDepth:
 
 
 class TestNumba:
-    def test_nodes_time(self):
-        rec_rate = 5e-6
-        pop_size = 1000
-        coal_rate = 1 / (2 * pop_size)
-        seed = 2592
-        assert True
-
-    def test_binary_search(self):
-        x = np.array([0.1, 0.5, 1.2, 1.6, 1.8, 2.0, 3.0, 9.0])
-        ret = liknb.binary_search(x, 1.8, 0, 4)
-        assert ret == 4
-        ret = liknb.binary_search(x, 1.8, 4, x.size)
-        assert ret == 4
-
     def test_counts(self):
         intervals = np.array([0, 2, 4, 6, 8], np.float64)
         counts = np.array([4, 3, 2, 1, 1], np.int64)
-        i = liknb.update_counts_descending(intervals, counts, 4, 2, -1)
+        i = likdes.update_counts_descending(intervals, counts, 4, 2, -1)
         assert i == 0
         exp_counts = np.array([4, 2, 1, 0, 1], dtype=np.int64)
         assert np.array_equal(counts, exp_counts)
 
-        i = liknb.update_counts_descending(intervals, counts, 4, 0, +1)
+        i = likdes.update_counts_descending(intervals, counts, 4, 0, +1)
         assert i == -1
         exp_counts = np.array([5, 3, 2, 1, 1], dtype=np.int64)
         assert np.array_equal(counts, exp_counts)
@@ -393,16 +380,7 @@ class TestNumba:
             -rec_rate * min_parent_time - coal_rate * cum_area
         )
 
-        obs_value = liknb.log_depth(
-            min_parent_time,
-            left_counts,
-            intervals,
-            rec_rate,
-            coal_rate,
-            True,
-        )
         ret = np.log(ret)
-        assert np.isclose(obs_value, ret)
         left_counts = np.array([8, 7, 7])
         intervals = np.array([12.1, 13.9, 14.1, 15.9])
         parent_ptr = 3
@@ -426,13 +404,11 @@ class TestNumba:
         num_samples = 2
         for seed in seeds:
             ts = run_hudson(rec_rate, pop_size, seed, num_samples)
-            ret = liknb.log_likelihood(ts, rec_rate, pop_size)
             ret_hudson = msprime.log_arg_likelihood(
                 ts, recombination_rate=0.0, Ne=pop_size
             )
-            ret2 = liknb.log_likelihood_descending(ts, rec_rate, pop_size)
+            ret = likdes.log_likelihood_descending(ts, rec_rate, pop_size)
             assert np.isclose(ret_hudson, ret)
-            assert np.isclose(ret2, ret)
 
     def test_compute_lik_seq_simple(self):
         seeds = [3554, 2368, 94720, 836502]
@@ -443,11 +419,8 @@ class TestNumba:
         for seed in seeds:
             ts = run_smc(rec_rate, pop_size, seed, samples)
             exp = lik.log_likelihood_seq(ts, rec_rate, pop_size)
-            ret = liknb.log_likelihood(ts, rec_rate, pop_size)
-            ret2 = liknb.log_likelihood_descending(ts, rec_rate, pop_size)
-            assert np.isclose(exp, ret)
-            print(ret2, ret, exp, seed)
-            assert np.isclose(ret2, ret)
+            ret = likdes.log_likelihood_descending(ts, rec_rate, pop_size)
+            assert np.isclose(ret, exp)
 
     def test_compute_lik_seq(self):
         seeds = [12, 23423, 231, 967893]
@@ -457,10 +430,8 @@ class TestNumba:
         for seed in seeds:
             ts = run_smc(rec_rate, pop_size, seed)
             exp = lik.log_likelihood_seq(ts, rec_rate, pop_size)
-            ret = liknb.log_likelihood(ts, rec_rate, pop_size)
-            ret2 = liknb.log_likelihood_descending(ts, rec_rate, pop_size)
+            ret2 = likdes.log_likelihood_descending(ts, rec_rate, pop_size)
             ret3 = liknb.log_likelihood_descending_numba(ts, rec_rate, pop_size)
-            print(ret3, ret2, ret, exp)
-            assert np.isclose(exp, ret)
-            assert np.isclose(ret, ret2)
-            assert np.isclose(ret, ret3)
+            print(ret3, ret2, exp)
+            assert np.isclose(exp, ret2)
+            assert np.isclose(exp, ret3)
