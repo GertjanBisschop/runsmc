@@ -434,4 +434,4 @@ class TestNumba:
             ret3 = liknb.log_likelihood_descending_numba(ts, rec_rate, pop_size)
             print(ret3, ret2, exp)
             assert np.isclose(exp, ret2)
-            assert np.isclose(exp, ret3)
+            assert np.isclose(exp, ret3)    

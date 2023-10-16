@@ -44,9 +44,9 @@ def log_likelihood_descending(ts, rec_rate, population_size):
     I, node_map = np.unique(ts.nodes_time, return_inverse=True)
     num_intervals = I.size
     C = np.zeros_like(I, dtype=np.int64)
+    last_parent_array = -np.ones(ts.num_nodes, dtype=np.int64)
 
     for _, edges_out, edges_in in ts.edge_diffs():
-        last_parent_array = -np.ones(ts.num_nodes, dtype=np.int64)
 
         for edge in edges_out:
             t_child = ts.nodes_time[edge.child]

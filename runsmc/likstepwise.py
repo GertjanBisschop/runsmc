@@ -157,11 +157,6 @@ def _log_likelihood_stepwise_ne(
             if num_children_array[p] == 2:
                 coalescent_interval_array[parent_ptr] += 1
 
-        for j in range(tree_pos.out_range[0], tree_pos.out_range[1]):
-            e = tree_pos.edge_removal_order[j]
-            c = edges_child[e]
-            last_parent_array[c] = -1
-
     for i in range(coalescent_interval_array.size):
         ret += coalescent_interval_array[i] * np.log(coal_rate[i])
 

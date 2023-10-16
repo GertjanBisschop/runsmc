@@ -186,6 +186,7 @@ def _log_likelihood_descending_numba(
     edges_right,
     rec_rate,
     coal_rate,
+    rec_correction
 ):
     ret = 0
     num_nodes = len(node_map)
@@ -193,6 +194,7 @@ def _log_likelihood_descending_numba(
     num_children_array = np.zeros(num_nodes, dtype=np.int64)
     C = np.zeros_like(I, dtype=np.int64)
     last_parent_array = -np.ones(num_nodes, dtype=np.int64)
+    visited_array = np.zeros(num_nodes, dtype=np.int8)
 
     while tree_pos.next():
         for j in range(tree_pos.out_range[0], tree_pos.out_range[1]):
@@ -222,7 +224,10 @@ def _log_likelihood_descending_numba(
                 last_parent_ptr = node_map[last_parent]
                 left_parent_time = I[last_parent_ptr]
                 if p != last_parent:
-                    rec_event = True
+                    if visited_array[p] == 0:
+                        rec_event = True
+                        if rec_correction:
+                            visited_array[p] = 1
 
             min_parent_time = min(left_parent_time, t_parent)
             ret += log_depth_descending(
@@ -248,18 +253,13 @@ def _log_likelihood_descending_numba(
             if num_children_array[p] >= 2:
                 coalescent_nodes_array[p] = 1
 
-        for j in range(tree_pos.out_range[0], tree_pos.out_range[1]):
-            e = tree_pos.edge_removal_order[j]
-            c = edges_child[e]
-            last_parent_array[c] = -1
-
     num_coal_events = np.sum(coalescent_nodes_array)
     ret += num_coal_events * np.log(coal_rate)
 
     return ret
 
 
-def log_likelihood_descending_numba(ts, rec_rate, population_size):
+def log_likelihood_descending_numba(ts, rec_rate, population_size, rec_correction=False):
     # here we can no longer account for the fact that past the
     # first mrca we might observe discontinuous edges (for the
     # same parent child pair)
@@ -277,4 +277,5 @@ def log_likelihood_descending_numba(ts, rec_rate, population_size):
         ts.edges_right,
         rec_rate,
         coal_rate,
+        rec_correction
     )

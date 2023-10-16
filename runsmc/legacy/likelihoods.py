@@ -257,9 +257,9 @@ def log_likelihood_seq(ts, rec_rate, population_size):
     num_children_array = np.zeros(ts.num_nodes, dtype=np.int64)
     A = bintrees.AVLTree()
     A[0] = 0
+    last_parent_array = -np.ones(ts.num_nodes, dtype=np.int64)
 
     for _, edges_out, edges_in in ts.edge_diffs():
-        last_parent_array = -np.ones(ts.num_nodes, dtype=np.int64)
         for edge in edges_out:
             t_child = ts.nodes_time[edge.child]
             t_parent = ts.nodes_time[edge.parent]
