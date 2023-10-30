@@ -102,6 +102,9 @@ def _log_likelihood_stepwise_ne(
     num_children_array = np.zeros(num_nodes, dtype=np.int64)
     C = np.zeros_like(I, dtype=np.int64)
     last_parent_array = -np.ones(num_nodes, dtype=np.int64)
+    last_tree_parent_array = -np.ones(num_nodes, dtype=np.int64)
+    right_co = np.zeros(num_nodes, dtype=np.float64)
+    g = 1.0
 
     while tree_pos.next():
         for j in range(tree_pos.out_range[0], tree_pos.out_range[1]):
@@ -114,11 +117,14 @@ def _log_likelihood_stepwise_ne(
             stop_ptr = liknb.update_counts_descending_ptr(C, parent_ptr, child_ptr, -1)
             num_children_array[p] -= 1
             last_parent_array[c] = p
+            last_tree_parent_array[c] = p
+            right_co[p] = edges_right[e]
 
         for j in range(tree_pos.in_range[0], tree_pos.in_range[1]):
             e = tree_pos.edge_insertion_order[j]
             p = edges_parent[e]
             c = edges_child[e]
+            left = edges_left[e]
 
             parent_ptr = node_map[p]
             child_ptr = node_map[c]
@@ -132,6 +138,14 @@ def _log_likelihood_stepwise_ne(
                 left_parent_time = I[last_parent_ptr]
                 if p != last_parent:
                     rec_event = True
+                    if last_tree_parent_array[c]==-1:
+                        assert right_co[last_parent] < left
+                        g = left - right_co[last_parent]
+
+            else:
+                if right_co[p] > 0:
+                    assert right_co[p] < left
+                    left = right_co[p]
 
             min_parent_time = min(left_parent_time, t_parent)
             ret += log_depth_descending(
@@ -140,7 +154,7 @@ def _log_likelihood_stepwise_ne(
                 min_parent_time,
                 child_ptr,
                 parent_ptr,
-                rec_rate,
+                rec_rate * g,
                 coal_rate,
                 rec_event,
             )
@@ -148,14 +162,20 @@ def _log_likelihood_stepwise_ne(
                 rec_rate,
                 t_parent,
                 t_child,
-                edges_left[e],
+                left,
                 edges_right[e],
             )
+            g = 1.0
             # use current edge to update counts for all subsequent edges
             stop_ptr = liknb.update_counts_descending_ptr(C, parent_ptr, child_ptr, 1)
             num_children_array[p] += 1
             if num_children_array[p] == 2:
                 coalescent_interval_array[parent_ptr] += 1
+
+        for j in range(tree_pos.out_range[0], tree_pos.out_range[1]):
+            e = tree_pos.edge_removal_order[j]
+            c = edges_child[e]
+            last_tree_parent_array[c] = -1
 
     for i in range(coalescent_interval_array.size):
         ret += coalescent_interval_array[i] * np.log(coal_rate[i])

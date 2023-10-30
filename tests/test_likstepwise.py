@@ -152,3 +152,21 @@ class TestLogLik:
             )
             print(exp, ret)
             assert np.isclose(exp, ret)
+
+class TestBeyondRoot:
+    def test_compute_lik_seq(self):
+        seeds = [12, 23423, 231, 967893]
+        rec_rate = 1e-5
+        pop_size = np.array([1000])
+        time_steps = np.zeros(1)
+        coal_rate = 1 / (2 * pop_size)
+        for seed in seeds:
+            ts = run_smc(rec_rate, pop_size, seed)
+            ret = likstep.log_likelihood_stepwise_ne(
+                ts, 
+                rec_rate,
+                pop_size,
+                time_steps,
+            )
+            assert ret < 0
+    
