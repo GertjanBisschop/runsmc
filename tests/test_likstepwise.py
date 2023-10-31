@@ -169,4 +169,32 @@ class TestBeyondRoot:
                 time_steps,
             )
             assert ret < 0
-    
+
+    def test_slice(self):
+        seed = 12
+        rec_rate = 1e-5
+        pop_size = np.array([1000])
+        time_steps = np.zeros(1)
+        ts = run_smc(rec_rate, pop_size, seed)
+        min_root_time = np.min(
+            [tree.time(tree.root) for tree in ts.trees()]
+        )
+        sts = ts.decapitate(min_root_time)
+        stss = sts.simplify(keep_unary=True)
+        ret = likstep.log_likelihood_stepwise_ne(
+            stss, 
+            rec_rate,
+            pop_size,
+            time_steps,
+        )
+        exp = liknb.log_likelihood_descending_numba(
+            stss, rec_rate, pop_size[0]
+        )    
+        assert np.isclose(exp, ret)
+        ret2 = likstep.log_likelihood_stepwise_ne(
+            ts, 
+            rec_rate,
+            pop_size,
+            time_steps,
+        )
+        assert ret2 < ret

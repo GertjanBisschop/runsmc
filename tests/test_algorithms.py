@@ -66,8 +66,8 @@ class TestBeyondRoot:
     def test_beyond_root(self):
         rng = np.random.default_rng(9948)
         seeds = rng.integers(1, 2**16, 100)
-        found_no_rec = False
-        found_rec = False
+        found_no_rec = 0
+        found_rec = 0
         for i in range(seeds.size):
             ts = run_smc(
                 1e-2,
@@ -76,7 +76,11 @@ class TestBeyondRoot:
             )
             last_parent_array = -np.ones(ts.num_nodes, dtype=np.int64)
             last_tree_parent_array = -np.ones(ts.num_nodes, dtype=np.int64)
-            right_co = np.zeros(ts.num_nodes, dtype=np.int64)
+            right_co = np.zeros(ts.num_nodes, dtype=np.int64)    
+            first_root_time = np.min(
+                [tree.time(tree.root) for tree in ts.trees()]
+            )
+        
             for _, edges_out, edges_in in ts.edge_diffs():
                 for edge in edges_out:
                     last_parent_array[edge.child] = edge.parent
@@ -87,16 +91,13 @@ class TestBeyondRoot:
                     if last_parent_array[edge.child] != -1:
                         if edge.parent != last_parent_array[edge.child]:
                             if last_tree_parent_array[edge.child]==-1:
-                                found_rec = True
-                                break
+                                found_rec += 1
+                                assert ts.nodes_time[edge.child] >= first_root_time
                         else:
-                            found_no_rec = True
-                            break
+                            found_no_rec += 1
+                            assert ts.nodes_time[edge.child] >= first_root_time
                       
                 for edge in edges_out:
                     last_tree_parent_array[edge.child] = -1
-                        
-                
-            if found_no_rec and found_rec:
-                break
-        assert found_no_rec and found_rec  
+ 
+        assert found_no_rec and found_rec
