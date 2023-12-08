@@ -83,7 +83,7 @@ def alloc_tree_position(ts):
     )
 
 
-@numba.njit(cache=True)
+@numba.njit
 def update_counts_descending_ptr(counts, start_ptr, stop_ptr, increment):
     assert start_ptr > 0
 
@@ -96,8 +96,8 @@ def update_counts_descending_ptr(counts, start_ptr, stop_ptr, increment):
     return i
 
 
-@numba.njit(cache=True)
-def log_depth_descending(
+@numba.njit
+def log_depth(
     left_count,
     intervals,
     min_parent_time,
@@ -164,7 +164,7 @@ def log_depth_descending(
     return np.log(ret)
 
 
-@numba.njit(cache=True)
+@numba.njit
 def log_span(r, parent_time, child_time, left, right):
     ret = 0
     if r > 0:
@@ -175,8 +175,8 @@ def log_span(r, parent_time, child_time, left, right):
     return ret
 
 
-@numba.njit(cache=True)
-def _log_likelihood_descending_numba(
+@numba.njit
+def _log_likelihood(
     tree_pos,
     I,
     node_map,
@@ -230,7 +230,7 @@ def _log_likelihood_descending_numba(
                             visited_array[p] = 1
 
             min_parent_time = min(left_parent_time, t_parent)
-            ret += log_depth_descending(
+            ret += log_depth(
                 C,
                 I,
                 min_parent_time,
@@ -259,7 +259,7 @@ def _log_likelihood_descending_numba(
     return ret
 
 
-def log_likelihood_descending_numba(ts, rec_rate, population_size, rec_correction=False):
+def log_likelihood(ts, rec_rate, population_size, rec_correction=False):
     # here we can no longer account for the fact that past the
     # first mrca we might observe discontinuous edges (for the
     # same parent child pair)
@@ -267,7 +267,7 @@ def log_likelihood_descending_numba(ts, rec_rate, population_size, rec_correctio
     I, node_map = np.unique(ts.nodes_time, return_inverse=True)
     tree_pos = alloc_tree_position(ts)
 
-    return _log_likelihood_descending_numba(
+    return _log_likelihood(
         tree_pos,
         I,
         node_map,

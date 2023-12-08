@@ -117,13 +117,13 @@ class TestLogDepth:
             -rec_rate * min_parent_time - coal_rate * cum_area
         )
         ret = np.log(np.sum(temp))
-        # using log_depth_descending
+        # using likstep.log_depth
         left_counts = np.array([8, 7, 7])
         intervals = np.array([12.1, 13.9, 14.1, 15.9])
         child_ptr = 0
         parent_ptr = 3
         coal_rate_array = np.full(intervals.size, 1 / 2e3)
-        obs_value = likstep.log_depth_descending(
+        obs_value = likstep.log_depth(
             left_counts,
             intervals,
             intervals[-2],

@@ -76,7 +76,7 @@ def log_likelihood_descending(ts, rec_rate, population_size):
                     rec_event = True
 
             min_parent_time = min(left_parent_time, t_parent)
-            ret += liknb.log_depth_descending(
+            ret += liknb.log_depth(
                 C,
                 I,
                 min_parent_time,

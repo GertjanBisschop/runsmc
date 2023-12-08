@@ -384,7 +384,7 @@ class TestNumba:
         left_counts = np.array([8, 7, 7])
         intervals = np.array([12.1, 13.9, 14.1, 15.9])
         parent_ptr = 3
-        obs_value = liknb.log_depth_descending(
+        obs_value = liknb.log_depth(
             left_counts,
             intervals,
             intervals[-2],
@@ -431,7 +431,7 @@ class TestNumba:
             ts = run_smc(rec_rate, pop_size, seed)
             exp = lik.log_likelihood_seq(ts, rec_rate, pop_size)
             ret2 = likdes.log_likelihood_descending(ts, rec_rate, pop_size)
-            ret3 = liknb.log_likelihood_descending_numba(ts, rec_rate, pop_size)
+            ret3 = liknb.log_likelihood(ts, rec_rate, pop_size)
             print(ret3, ret2, exp)
             assert np.isclose(exp, ret2)
             assert np.isclose(exp, ret3)    

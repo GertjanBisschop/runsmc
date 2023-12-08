@@ -7,7 +7,7 @@ import tskit
 from scipy.special import logsumexp
 from runsmc import liknb
 
-@numba.njit(cache=True)
+@numba.njit
 def two_sum(a, b):
     # helper function for cascaded summation
     x = a + b
@@ -16,8 +16,8 @@ def two_sum(a, b):
     return x, e
 
 
-@numba.njit(cache=True)
-def log_depth_descending(
+@numba.njit
+def log_depth(
     left_count,
     intervals,
     min_parent_time,
@@ -27,7 +27,7 @@ def log_depth_descending(
     coal_rate,
     rec_event,
 ):
-    ret = np.zeros(parent_ptr - child_ptr, dtype=np.float64)
+    #ret = np.zeros(parent_ptr - child_ptr, dtype=np.float64)
     cum_area = 0
     i = parent_ptr
 
@@ -84,7 +84,7 @@ def log_depth_descending(
     return np.log(total)
 
 
-@numba.njit(cache=True)
+@numba.njit
 def _log_likelihood_stepwise_ne(
     tree_pos,
     I,
@@ -134,7 +134,7 @@ def _log_likelihood_stepwise_ne(
                     rec_event = True
 
             min_parent_time = min(left_parent_time, t_parent)
-            ret += log_depth_descending(
+            ret += log_depth(
                 C,
                 I,
                 min_parent_time,
@@ -163,7 +163,7 @@ def _log_likelihood_stepwise_ne(
     return ret
 
 
-@numba.njit(cache=True)
+@numba.njit
 def update_mapping(j, k, old_map, new_map):
     current_value = old_map[k]
     while current_value == old_map[k]:
@@ -174,7 +174,7 @@ def update_mapping(j, k, old_map, new_map):
     return k
 
 
-@numba.njit(cache=True)
+@numba.njit
 def merge_time_arrays(node_times, step_times, node_mapping):
     """
     Mapping should be pointing to
