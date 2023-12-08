@@ -8,7 +8,7 @@ import mpmath as mp
 import runsmc.liknb as liknb
 import runsmc.likstepwise as likstep
 import runsmc.legacy.likdescending as likdes
-
+import runsmc.likslice as likslice
 
 def run_hudson(r, pop_size, seed, num_samples=10):
     ts = msprime.sim_ancestry(
@@ -152,3 +152,60 @@ class TestLogLik:
             )
             print(exp, ret)
             assert np.isclose(exp, ret)
+
+class TestSlice:
+    def test_simple(self):
+        seeds = [3554, 2368, 94720, 836502]
+        rec_rate = 5e-6
+        pop_size = 1000.0
+        pop_size_array = np.array([pop_size])
+        time_steps = np.zeros(1)
+        samples = 10
+        for seed in seeds:
+            ts = run_smc(rec_rate, pop_size, seed, samples)
+            exp = likstep.log_likelihood_stepwise_ne(
+                ts, rec_rate, pop_size_array, time_steps
+            )
+            ret = likslice.log_likelihood(
+                ts,
+                rec_rate,
+                pop_size,
+                [0, ts.max_root_time]
+            )
+            assert exp == ret
+
+    def test_simple2(self):
+        seeds = [3554, 2368, 94720, 836502]
+        rec_rate = 5e-6
+        pop_size = 1000.0
+        pop_size_array = np.array([pop_size])
+        time_steps = np.zeros(1)
+        samples = 10
+        for seed in seeds:
+            ts = run_smc(rec_rate, pop_size, seed, samples)
+            exp = likstep.log_likelihood_stepwise_ne(
+                ts, rec_rate, pop_size_array, time_steps
+            )
+            ret = likslice.log_likelihood(
+                ts,
+                rec_rate,
+                pop_size,
+                [0, ts.max_root_time+1]
+            )
+            assert exp == ret
+
+    def test_slice(self):
+        seeds = [3554, 2368, 94720, 836502]
+        rec_rate = 5e-6
+        pop_size = 1000.0
+        pop_size_array = np.array([pop_size])
+        time_steps = np.zeros(1)
+        samples = 10
+        for seed in seeds:
+            ts = run_smc(rec_rate, pop_size, seed, samples)
+            ret = likslice.log_likelihood(
+                ts,
+                rec_rate,
+                pop_size,
+                [0, ts.max_root_time//2]
+            )
