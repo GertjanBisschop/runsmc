@@ -260,9 +260,6 @@ def _log_likelihood(
 
 
 def log_likelihood(ts, rec_rate, population_size, rec_correction=False):
-    # here we can no longer account for the fact that past the
-    # first mrca we might observe discontinuous edges (for the
-    # same parent child pair)
     coal_rate = 1 / (2 * population_size)
     I, node_map = np.unique(ts.nodes_time, return_inverse=True)
     tree_pos = alloc_tree_position(ts)
