@@ -170,11 +170,6 @@ def _log_likelihood(
 
 
 def log_likelihood(ts, rec_rate, population_size, time_slice, ploidy=2):
-    # here we can no longer account for the fact that past the
-    # first mrca we might observe discontinuous edges (for the
-    # same parent child pair)
-    # add time_slice to ts.nodes_time
-    
     all_nodes_time = np.hstack([ts.nodes_time, np.array(time_slice)])
     I, node_map = np.unique(all_nodes_time, return_inverse=True)
     coal_rate = np.full(I.size, 1 / (ploidy * population_size))

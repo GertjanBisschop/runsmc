@@ -226,9 +226,6 @@ def merge_time_arrays(node_times, step_times, node_mapping):
 
 
 def log_likelihood_stepwise_ne(ts, rec_rate, ne_steps, time_steps, ploidy=2):
-    # here we can no longer account for the fact that past the
-    # first mrca we might observe discontinuous edges (for the
-    # same parent child pair)
     assert ne_steps.size == time_steps.size
     assert np.all(ne_steps>0)
     coal_rate_steps = 1 / (ploidy * ne_steps)
